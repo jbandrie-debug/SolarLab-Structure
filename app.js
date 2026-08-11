@@ -1,1765 +1,3946 @@
 /* =========================================================
-   SolarLab Structure V3
-   Interactive Solar Engineering Simulator
-   ========================================================= */
+   SOLARLAB STRUCTURE V3
+   INTERACTIVE CONNECTION ENGINE
+========================================================= */
 
-const $ = id => document.getElementById(id);
+"use strict";
 
-const types = {
-  panel: {
-    name: "Solar Panel",
-    sub: "550 W PV module",
-    icon: "",
-    visual: "pv",
-    props: ["550 W", "Vmp 41.8 V", "Imp 13.16 A"]
-  },
-  mppt: {
-    name: "MPPT Controller",
-    sub: "Charge controller",
-    icon: "⚙",
-    props: ["48 V nominal", "98% efficiency", "DC input"]
-  },
-  battery: {
-    name: "Battery Bank",
-    sub: "48 V storage",
-    icon: "🔋",
-    props: ["48 V", "200 Ah", "9.6 kWh nominal"]
-  },
-  breaker: {
-    name: "DC Breaker",
-    sub: "Protection",
-    icon: "▣",
-    props: ["DC rated", "Protection device", "Manual trip"]
-  },
-  inverter: {
-    name: "Inverter",
-    sub: "DC → AC",
-    icon: "↕",
-    props: ["5,000 W", "48 V DC input", "AC output"]
-  },
-  load: {
-    name: "AC Load",
-    sub: "Consumer",
-    icon: "💡",
-    props: ["850 W", "AC demand", "Variable"]
-  },
-  meter: {
-    name: "Energy Meter",
-    sub: "Measurement",
-    icon: "▥",
-    props: ["Voltage", "Current", "Energy"]
-  }
-};
 
 /* =========================================================
-   STATE
-   ========================================================= */
+   GLOBAL STATE
+========================================================= */
 
-let S = {
-  name: "SolarLab Test System",
-  desc: "48V solar power system simulation.",
-  v: 48,
-  panels: 4,
-  pw: 550,
-  ah: 200,
-  iw: 5000,
+const state = {
 
-  sun: 100,
-  load: 850,
-  soc: 76,
+  page: "welcome",
+
+  mode: "select",
 
   nodes: [],
+
   connections: [],
 
-  fault: "",
-  running: false,
-  seconds: 0,
-
   selectedNode: null,
-  selectedWire: null,
-  wiringFrom: null
+
+  selectedConnection: null,
+
+  pendingTerminal: null,
+
+  history: [],
+
+  simulationRunning: false,
+
+  simulationSeconds: 0,
+
+  faults: [],
+
+  project: {
+    name: "SolarLab V3 Test System",
+    description: "Interactive 48V solar power system simulation.",
+    voltage: 48,
+    panelCount: 4,
+    panelRating: 550,
+    batteryAh: 200,
+    inverterRating: 5000
+  }
+
 };
 
-/* =========================================================
-   HELPERS
-   ========================================================= */
-
-function uid(prefix = "id") {
-  return prefix + "_" + Date.now() + "_" +
-    Math.random().toString(36).slice(2, 8);
-}
-
-function toast(message) {
-  const t = $("toast");
-  if (!t) return;
-
-  t.textContent = message;
-  t.style.display = "block";
-
-  clearTimeout(window.__toastTimer);
-
-  window.__toastTimer = setTimeout(() => {
-    t.style.display = "none";
-  }, 1800);
-}
 
 /* =========================================================
-   PAGE NAVIGATION
-   ========================================================= */
+   COMPONENT DEFINITIONS
+========================================================= */
 
-function show(id) {
-  document.querySelectorAll(".page").forEach(page => {
-    page.classList.remove("active");
-  });
+const COMPONENTS = {
 
-  const page = $(id);
+  panel: {
+    name: "Solar Panel",
+    icon: "☀",
+    voltage: 48,
+    power: 550,
+    terminals: ["positive", "negative"]
+  },
 
-  if (!page) return;
+  mppt: {
+    name: "MPPT Controller",
+    icon: "⚙",
+    voltage: 48,
+    power: 0,
+    terminals: [
+      "positive",
+      "negative"
+    ]
+  },
 
-  page.classList.add("active");
+  battery: {
+    name: "Battery Bank",
+    icon: "🔋",
+    voltage: 48,
+    power: 0,
+    terminals: [
+      "positive",
+      "negative"
+    ]
+  },
 
-  if (id === "analysis") {
-    analysis();
+  breaker: {
+    name: "DC Breaker",
+    icon: "▣",
+    voltage: 48,
+    power: 0,
+    terminals: [
+      "positive",
+      "negative"
+    ]
+  },
+
+  inverter: {
+    name: "Inverter",
+    icon: "↕",
+    voltage: 48,
+    power: 5000,
+    terminals: [
+      "positive",
+      "negative",
+      "ac"
+    ]
+  },
+
+  load: {
+    name: "AC Load",
+    icon: "💡",
+    voltage: 230,
+    power: 850,
+    terminals: [
+      "ac"
+    ]
+  },
+
+  meter: {
+    name: "Energy Meter",
+    icon: "▥",
+    voltage: 230,
+    power: 0,
+    terminals: [
+      "ac"
+    ]
   }
 
-  if (id === "report") {
-    report();
-  }
-}
+};
 
-document.querySelectorAll("[data-page]").forEach(button => {
-  button.addEventListener("click", () => {
-    show(button.dataset.page);
+
+/* =========================================================
+   DOM HELPERS
+========================================================= */
+
+const $ = selector =>
+  document.querySelector(selector);
+
+const $$ = selector =>
+  Array.from(document.querySelectorAll(selector));
+
+
+/* =========================================================
+   INITIALIZATION
+========================================================= */
+
+document.addEventListener("DOMContentLoaded", () => {
+
+  setupNavigation();
+
+  setupToolbar();
+
+  setupLibrary();
+
+  setupExperiment();
+
+  setupFaults();
+
+  setupSave();
+
+  setupReport();
+
+  loadProjectData();
+
+  renderAll();
+
+});
+
+
+/* =========================================================
+   NAVIGATION
+========================================================= */
+
+function setupNavigation() {
+
+  $$("[data-page]").forEach(button => {
+
+    button.addEventListener("click", () => {
+
+      const page = button.dataset.page;
+
+      if (page) {
+        showPage(page);
+      }
+
+    });
+
   });
-});
 
-/* =========================================================
-   PROJECT SETUP
-   ========================================================= */
-
-function readSetup() {
-  S.name = $("pname").value;
-  S.desc = $("pdesc").value;
-  S.v = Number($("voltage").value);
-  S.panels = Math.max(1, Number($("panelCount").value));
-  S.pw = Math.max(50, Number($("panelW").value));
-  S.ah = Math.max(20, Number($("batteryAh").value));
-  S.iw = Math.max(100, Number($("inverterW").value));
 }
 
-[
-  "pname",
-  "pdesc",
-  "voltage",
-  "panelCount",
-  "panelW",
-  "batteryAh",
-  "inverterW"
-].forEach(id => {
-  const el = $(id);
-  if (el) el.addEventListener("input", readSetup);
-});
 
-/* =========================================================
-   COMPONENT CREATION
-   ========================================================= */
+function showPage(page) {
 
-function add(type, x, y) {
-  const board = $("board");
-
-  if (!board || !types[type]) return;
-
-  const rect = board.getBoundingClientRect();
-
-  const node = {
-    id: uid("node"),
-    type,
-    x: x ?? Math.max(20, Math.min(350, rect.width / 2 - 75)),
-    y: y ?? Math.max(70, Math.min(350, rect.height / 2 - 50))
+  const pageMap = {
+    welcome: "welcome",
+    setup: "setup",
+    design: "design",
+    experiment: "experiment",
+    analysis: "analysis",
+    report: "reportPage",
+    support: "support"
   };
 
-  S.nodes.push(node);
+  const target = pageMap[page] || page;
 
-  clampNode(node);
-
-  draw();
-
-  selectNode(node);
-
-  toast(types[type].name + " placed");
-}
-
-document.querySelectorAll(".component").forEach(button => {
-  button.addEventListener("click", () => {
-    add(button.dataset.type);
+  $$(".page").forEach(section => {
+    section.classList.remove("active");
   });
-});
 
-/* =========================================================
-   NODE HTML
-   ========================================================= */
+  const targetPage = document.getElementById(target);
 
-function nodeHTML(node) {
-  const t = types[node.type];
+  if (targetPage) {
+    targetPage.classList.add("active");
+  }
 
-  const visual =
-    node.type === "panel"
-      ? "visual pv"
-      : "visual";
+  $$(".mainNav button").forEach(button => {
+    button.classList.toggle(
+      "active",
+      button.dataset.page === page
+    );
+  });
 
-  return `
-    <div class="${visual}">
-      ${t.icon}
-    </div>
+  state.page = page;
 
-    <b>${t.name}</b>
+  if (page === "analysis") {
+    runAnalysis();
+  }
 
-    <small>${t.sub}</small>
+  if (page === "report") {
+    generateReport();
+  }
 
-    <button
-      class="nodeDelete"
-      title="Remove component"
-      type="button"
-    >×</button>
-
-    <button
-      class="terminal plus"
-      data-terminal="positive"
-      title="Positive terminal"
-      type="button"
-    >+</button>
-
-    <button
-      class="terminal minus"
-      data-terminal="negative"
-      title="Negative terminal"
-      type="button"
-    >−</button>
-  `;
 }
 
+
 /* =========================================================
-   DRAW NODES
-   ========================================================= */
+   TOOLBAR
+========================================================= */
 
-function draw() {
-  const container = $("nodes");
+function setupToolbar() {
 
-  if (!container) return;
+  $("#selectMode").addEventListener(
+    "click",
+    () => setMode("select")
+  );
 
-  container.innerHTML = "";
+  $("#connectMode").addEventListener(
+    "click",
+    () => setMode("connect")
+  );
 
-  S.nodes.forEach(node => {
+  $("#seriesMode").addEventListener(
+    "click",
+    () => setMode("series")
+  );
 
-    const element = document.createElement("div");
+  $("#parallelMode").addEventListener(
+    "click",
+    () => setMode("parallel")
+  );
+
+
+  $("#autoWire").addEventListener(
+    "click",
+    autoWire
+  );
+
+
+  $("#removeSelected").addEventListener(
+    "click",
+    removeSelected
+  );
+
+
+  $("#undoBtn").addEventListener(
+    "click",
+    undo
+  );
+
+
+  $("#clearBoard").addEventListener(
+    "click",
+    clearBoard
+  );
+
+}
+
+
+function setMode(mode) {
+
+  state.mode = mode;
+
+  state.pendingTerminal = null;
+
+  $$(".tool").forEach(button => {
+    button.classList.remove("active");
+  });
+
+  const buttonMap = {
+    select: "#selectMode",
+    connect: "#connectMode",
+    series: "#seriesMode",
+    parallel: "#parallelMode"
+  };
+
+  $(buttonMap[mode])?.classList.add("active");
+
+  $("#currentMode").textContent =
+    mode.toUpperCase();
+
+
+  const messages = {
+
+    select:
+      "SELECT mode: click a component to inspect it. Drag components to reposition them.",
+
+    connect:
+      "CONNECT mode: click one terminal, then another terminal to create a connection.",
+
+    series:
+      "SERIES mode: connect components in sequence. Each wire is stored independently.",
+
+    parallel:
+      "PARALLEL mode: connect multiple branches to the same electrical points."
+
+  };
+
+  $("#connectionHint").textContent =
+    messages[mode];
+
+}
+
+
+/* =========================================================
+   COMPONENT LIBRARY
+========================================================= */
+
+function setupLibrary() {
+
+  $$(".component").forEach(button => {
+
+    button.addEventListener("click", () => {
+
+      addNode(button.dataset.type);
+
+    });
+
+  });
+
+}
+
+
+function addNode(type, x = null, y = null) {
+
+  if (!COMPONENTS[type]) {
+    return;
+  }
+
+  saveHistory();
+
+
+  const existingCount =
+    state.nodes.filter(node =>
+      node.type === type
+    ).length;
+
+
+  const board = $("#board");
+
+  const boardRect =
+    board.getBoundingClientRect();
+
+
+  if (x === null) {
+
+    x =
+      50 +
+      (existingCount % 3) * 180;
+
+  }
+
+
+  if (y === null) {
+
+    y =
+      80 +
+      Math.floor(existingCount / 3) * 150;
+
+  }
+
+
+  x = clamp(
+    x,
+    15,
+    Math.max(15, boardRect.width - 175)
+  );
+
+  y = clamp(
+    y,
+    50,
+    Math.max(50, boardRect.height - 130)
+  );
+
+
+  const node = {
+
+    id:
+      `${type}-${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2, 6)}`,
+
+    type,
+
+    x,
+
+    y,
+
+    voltage:
+      COMPONENTS[type].voltage,
+
+    power:
+      COMPONENTS[type].power,
+
+    label:
+      COMPONENTS[type].name,
+
+    terminals:
+      COMPONENTS[type].terminals.map(
+        terminal => ({
+          id: terminal,
+          type: terminal
+        })
+      )
+
+  };
+
+
+  state.nodes.push(node);
+
+  state.selectedNode = node.id;
+
+  renderBoard();
+
+  updateInspector();
+
+  toast(
+    `${COMPONENTS[type].name} added.`
+  );
+
+}
+
+
+/* =========================================================
+   RENDER BOARD
+========================================================= */
+
+function renderBoard() {
+
+  const layer = $("#nodeLayer");
+
+  layer.innerHTML = "";
+
+  state.nodes.forEach(node => {
+
+    const element =
+      document.createElement("div");
 
     element.className = "node";
 
-    if (S.selectedNode === node.id) {
+    element.dataset.id = node.id;
+
+    if (state.selectedNode === node.id) {
       element.classList.add("selected");
     }
 
-    element.dataset.id = node.id;
 
-    element.style.left = node.x + "px";
-    element.style.top = node.y + "px";
+    if (
+      nodeHasError(node.id)
+    ) {
+      element.classList.add("error");
+    }
 
-    element.innerHTML = nodeHTML(node);
 
-    /* Node selection */
-    element.addEventListener("click", event => {
+    element.style.left =
+      `${node.x}px`;
+
+    element.style.top =
+      `${node.y}px`;
+
+
+    element.innerHTML = `
+
+      <div class="nodeHeader">
+
+        <span class="nodeTitle">
+          ${escapeHTML(node.label)}
+        </span>
+
+        <span class="nodeId">
+          ${node.id.slice(-4)}
+        </span>
+
+      </div>
+
+      <div class="nodeBody">
+
+        <span class="nodeIcon">
+          ${COMPONENTS[node.type].icon}
+        </span>
+
+        <span class="nodeInfo">
+
+          <small>
+            ${node.voltage}V
+          </small>
+
+          <strong>
+            ${node.power || 0}W
+          </strong>
+
+        </span>
+
+      </div>
+    `;
+
+
+    node.terminals.forEach(
+      terminal => {
+
+        const terminalElement =
+          createTerminal(
+            node,
+            terminal
+          );
+
+        element.appendChild(
+          terminalElement
+        );
+
+      }
+    );
+
+
+    setupNodeInteraction(
+      element,
+      node
+    );
+
+
+    layer.appendChild(element);
+
+  });
+
+
+  $("#boardEmpty").style.display =
+    state.nodes.length
+      ? "none"
+      : "block";
+
+
+  renderWires();
+
+}
+
+
+function createTerminal(node, terminal) {
+
+  const element =
+    document.createElement("div");
+
+  element.className =
+    `terminal ${terminal.type}`;
+
+  element.dataset.node =
+    node.id;
+
+  element.dataset.terminal =
+    terminal.id;
+
+
+  element.title =
+    `${node.label} • ${terminal.id}`;
+
+
+  element.addEventListener(
+    "pointerdown",
+    event => {
+
+      event.stopPropagation();
+
+      handleTerminalClick(
+        node.id,
+        terminal.id
+      );
+
+    }
+  );
+
+
+  return element;
+
+}
+
+
+/* =========================================================
+   NODE DRAGGING
+========================================================= */
+
+function setupNodeInteraction(
+  element,
+  node
+) {
+
+  let dragging = false;
+
+  let moved = false;
+
+  let startX = 0;
+
+  let startY = 0;
+
+  let originalX = node.x;
+
+  let originalY = node.y;
+
+
+  element.addEventListener(
+    "pointerdown",
+    event => {
 
       if (
-        event.target.classList.contains("terminal") ||
-        event.target.classList.contains("nodeDelete")
+        event.target.classList.contains(
+          "terminal"
+        )
       ) {
         return;
       }
 
-      selectNode(node);
-    });
 
-    /* Delete */
-    const deleteButton =
-      element.querySelector(".nodeDelete");
+      event.preventDefault();
 
-    deleteButton.addEventListener("click", event => {
-      event.stopPropagation();
-      removeNode(node.id);
-    });
+      dragging = true;
 
-    /* Terminals */
-    element.querySelectorAll(".terminal").forEach(terminal => {
+      moved = false;
 
-      terminal.addEventListener("click", event => {
+      startX = event.clientX;
 
-        event.stopPropagation();
+      startY = event.clientY;
 
-        const terminalType =
-          terminal.dataset.terminal;
+      originalX = node.x;
 
-        terminalClicked(node, terminalType);
-      });
-    });
+      originalY = node.y;
 
-    /* Drag */
-    element.addEventListener(
-      "pointerdown",
-      event => dragStart(event, node, element)
-    );
+      element.setPointerCapture(
+        event.pointerId
+      );
 
-    container.appendChild(element);
-  });
 
-  const empty = $("empty");
+      state.selectedNode =
+        node.id;
 
-  if (empty) {
-    empty.style.display =
-      S.nodes.length ? "none" : "grid";
-  }
+      state.selectedConnection =
+        null;
 
-  drawWires();
-}
+      renderBoard();
 
-/* =========================================================
-   KEEP NODE INSIDE BOARD
-   ========================================================= */
+      updateInspector();
 
-function clampNode(node) {
-  const board = $("board");
-
-  if (!board) return;
-
-  const maxX =
-    Math.max(10, board.clientWidth - 175);
-
-  const maxY =
-    Math.max(45, board.clientHeight - 125);
-
-  node.x = Math.max(
-    10,
-    Math.min(node.x, maxX)
-  );
-
-  node.y = Math.max(
-    45,
-    Math.min(node.y, maxY)
-  );
-}
-
-/* =========================================================
-   DRAG SYSTEM
-   ========================================================= */
-
-function dragStart(event, node, element) {
-
-  if (
-    event.target.classList.contains("terminal") ||
-    event.target.classList.contains("nodeDelete")
-  ) {
-    return;
-  }
-
-  event.preventDefault();
-
-  const board = $("board");
-
-  const rect = board.getBoundingClientRect();
-
-  const startX =
-    event.clientX - rect.left - node.x;
-
-  const startY =
-    event.clientY - rect.top - node.y;
-
-  let moved = false;
-
-  const move = e => {
-
-    moved = true;
-
-    const newRect =
-      board.getBoundingClientRect();
-
-    node.x =
-      e.clientX -
-      newRect.left -
-      startX;
-
-    node.y =
-      e.clientY -
-      newRect.top -
-      startY;
-
-    /* Grid snap */
-    node.x = Math.round(node.x / 10) * 10;
-    node.y = Math.round(node.y / 10) * 10;
-
-    clampNode(node);
-
-    element.style.left =
-      node.x + "px";
-
-    element.style.top =
-      node.y + "px";
-
-    drawWires();
-  };
-
-  const up = () => {
-
-    document.removeEventListener(
-      "pointermove",
-      move
-    );
-
-    document.removeEventListener(
-      "pointerup",
-      up
-    );
-
-    if (moved) {
-      saveSilently();
     }
-  };
+  );
 
-  document.addEventListener(
+
+  element.addEventListener(
     "pointermove",
-    move
+    event => {
+
+      if (!dragging) {
+        return;
+      }
+
+
+      const dx =
+        event.clientX - startX;
+
+      const dy =
+        event.clientY - startY;
+
+
+      if (
+        Math.abs(dx) > 3 ||
+        Math.abs(dy) > 3
+      ) {
+        moved = true;
+      }
+
+
+      const board =
+        $("#board");
+
+      const rect =
+        board.getBoundingClientRect();
+
+
+      node.x =
+        clamp(
+          originalX + dx,
+          10,
+          rect.width - element.offsetWidth - 10
+        );
+
+
+      node.y =
+        clamp(
+          originalY + dy,
+          40,
+          rect.height - element.offsetHeight - 10
+        );
+
+
+      element.style.left =
+        `${node.x}px`;
+
+      element.style.top =
+        `${node.y}px`;
+
+
+      renderWires();
+
+    }
   );
 
-  document.addEventListener(
+
+  element.addEventListener(
     "pointerup",
-    up
+    event => {
+
+      if (!dragging) {
+        return;
+      }
+
+
+      dragging = false;
+
+
+      try {
+        element.releasePointerCapture(
+          event.pointerId
+        );
+      } catch (_) {}
+
+
+      if (moved) {
+
+        saveHistory();
+
+        toast("Component moved.");
+
+      } else {
+
+        state.selectedNode =
+          node.id;
+
+        updateInspector();
+
+      }
+
+    }
   );
+
 }
 
+
 /* =========================================================
-   TERMINAL / MANUAL WIRING
-   ========================================================= */
+   TERMINAL CONNECTION ENGINE
+========================================================= */
 
-function terminalClicked(node, terminal) {
+function handleTerminalClick(
+  nodeId,
+  terminalId
+) {
 
-  if (!S.wiringFrom) {
+  const terminal = {
+    nodeId,
+    terminalId
+  };
 
-    S.wiringFrom = {
-      nodeId: node.id,
-      terminal
-    };
 
-    highlightTerminal(node.id, terminal);
+  if (!state.pendingTerminal) {
+
+    state.pendingTerminal =
+      terminal;
+
+    highlightTerminal(
+      nodeId,
+      terminalId
+    );
 
     toast(
-      `${types[node.type].name} ${terminal.toUpperCase()} selected`
+      "First terminal selected. Choose the second terminal."
     );
 
     return;
   }
 
-  const from = S.wiringFrom;
 
-  /* Same terminal */
+  const first =
+    state.pendingTerminal;
+
+  const second =
+    terminal;
+
+
+  state.pendingTerminal = null;
+
+
+  clearTerminalHighlights();
+
+
   if (
-    from.nodeId === node.id &&
-    from.terminal === terminal
+    first.nodeId === second.nodeId &&
+    first.terminalId === second.terminalId
   ) {
 
-    clearWiringSelection();
-
-    toast("Connection cancelled");
+    toast(
+      "You cannot connect a terminal to itself.",
+      true
+    );
 
     return;
   }
 
+
+  const validation =
+    validateConnection(
+      first,
+      second
+    );
+
+
+  if (!validation.valid) {
+
+    toast(
+      validation.message,
+      true
+    );
+
+    addFault(
+      validation.fault
+    );
+
+    renderBoard();
+
+    return;
+  }
+
+
   createConnection(
-    from.nodeId,
-    from.terminal,
-    node.id,
-    terminal
+    first,
+    second,
+    state.mode === "select"
+      ? "single"
+      : state.mode
   );
 
-  clearWiringSelection();
 }
+
 
 /* =========================================================
-   TERMINAL HIGHLIGHT
-   ========================================================= */
+   CONNECTION VALIDATION
+========================================================= */
 
-function highlightTerminal(nodeId, terminal) {
+function validateConnection(
+  a,
+  b
+) {
 
-  clearWiringSelection();
+  const nodeA =
+    getNode(a.nodeId);
 
-  const node =
-    document.querySelector(
-      `.node[data-id="${nodeId}"]`
-    );
+  const nodeB =
+    getNode(b.nodeId);
 
-  if (!node) return;
 
-  const target =
-    node.querySelector(
-      `.terminal.${terminal === "positive" ? "plus" : "minus"}`
-    );
+  if (!nodeA || !nodeB) {
 
-  if (target) {
-    target.classList.add("wiring");
+    return {
+      valid: false,
+      message: "Component not found.",
+      fault: "open"
+    };
+
   }
+
+
+  if (
+    connectionExists(
+      a,
+      b
+    )
+  ) {
+
+    return {
+      valid: false,
+      message: "Duplicate connection already exists.",
+      fault: "duplicate"
+    };
+
+  }
+
+
+  const typeA =
+    a.terminalId;
+
+  const typeB =
+    b.terminalId;
+
+
+  /*
+    AC-to-DC and DC-to-AC checks.
+  */
+
+  const acA =
+    typeA === "ac";
+
+  const acB =
+    typeB === "ac";
+
+
+  if (
+    acA !== acB
+  ) {
+
+    return {
+      valid: false,
+      message:
+        "Incompatible terminal: AC cannot be directly connected to a DC terminal.",
+      fault: "voltage"
+    };
+
+  }
+
+
+  /*
+    Load can only connect through AC.
+  */
+
+  if (
+    nodeA.type === "load" &&
+    !acB
+  ) {
+
+    return {
+      valid: false,
+      message:
+        "AC Load requires an AC connection.",
+      fault: "voltage"
+    };
+
+  }
+
+
+  if (
+    nodeB.type === "load" &&
+    !acA
+  ) {
+
+    return {
+      valid: false,
+      message:
+        "AC Load requires an AC connection.",
+      fault: "voltage"
+    };
+
+  }
+
+
+  /*
+    Energy meter is AC in this model.
+  */
+
+  if (
+    nodeA.type === "meter" &&
+    !acB
+  ) {
+
+    return {
+      valid: false,
+      message:
+        "Energy Meter requires an AC terminal.",
+      fault: "voltage"
+    };
+
+  }
+
+
+  if (
+    nodeB.type === "meter" &&
+    !acA
+  ) {
+
+    return {
+      valid: false,
+      message:
+        "Energy Meter requires an AC terminal.",
+      fault: "voltage"
+    };
+
+  }
+
+
+  /*
+    Same polarity direct connection.
+  */
+
+  if (
+    (typeA === "positive" &&
+      typeB === "positive") ||
+    (typeA === "negative" &&
+      typeB === "negative")
+  ) {
+
+    /*
+      Allow same polarity for parallel.
+      This is useful for intentionally
+      creating parallel branches.
+    */
+
+    if (
+      state.mode !== "parallel"
+    ) {
+
+      return {
+        valid: false,
+        message:
+          "Same-polarity connection detected. Use PARALLEL mode for intentional parallel wiring.",
+        fault: "polarity"
+      };
+
+    }
+
+  }
+
+
+  /*
+    Inverter AC terminal must connect
+    to AC equipment.
+  */
+
+  if (
+    nodeA.type === "inverter" &&
+    typeA === "ac" &&
+    nodeB.type === "inverter"
+  ) {
+
+    return {
+      valid: false,
+      message:
+        "Invalid inverter-to-inverter AC connection.",
+      fault: "short"
+    };
+
+  }
+
+
+  return {
+    valid: true
+  };
+
 }
 
-function clearWiringSelection() {
-
-  document
-    .querySelectorAll(".terminal.wiring")
-    .forEach(el => {
-      el.classList.remove("wiring");
-    });
-
-  S.wiringFrom = null;
-}
 
 /* =========================================================
    CREATE CONNECTION
-   ========================================================= */
+========================================================= */
 
 function createConnection(
-  fromNode,
-  fromTerminal,
-  toNode,
-  toTerminal
+  a,
+  b,
+  mode = "single"
 ) {
 
-  /* Prevent duplicate connection */
-  const duplicate =
-    S.connections.some(c =>
-      c.fromNode === fromNode &&
-      c.fromTerminal === fromTerminal &&
-      c.toNode === toNode &&
-      c.toTerminal === toTerminal
-    );
+  saveHistory();
 
-  if (duplicate) {
-    toast("Connection already exists");
-    return;
-  }
 
   const connection = {
-    id: uid("wire"),
 
-    fromNode,
-    fromTerminal,
+    id:
+      `wire-${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2, 6)}`,
 
-    toNode,
-    toTerminal
+    from: {
+      nodeId: a.nodeId,
+      terminalId: a.terminalId
+    },
+
+    to: {
+      nodeId: b.nodeId,
+      terminalId: b.terminalId
+    },
+
+    mode,
+
+    created:
+      new Date().toISOString()
+
   };
 
-  S.connections.push(connection);
 
-  drawWires();
+  state.connections.push(
+    connection
+  );
 
-  detectFaults();
 
-  saveSilently();
+  state.selectedConnection =
+    connection.id;
 
-  toast("Single connection created");
+  state.selectedNode = null;
+
+
+  renderWires();
+
+  renderConnectionList();
+
+  updateInspector();
+
+  toast(
+    `${mode.toUpperCase()} connection created.`
+  );
+
+
+  updateSystemFaults();
+
 }
 
+
 /* =========================================================
-   DRAW CUSTOM WIRES
-   ========================================================= */
+   DUPLICATE CONNECTION
+========================================================= */
 
-function drawWires() {
+function connectionExists(
+  a,
+  b
+) {
 
-  const svg = $("wires");
+  return state.connections.some(
+    connection => {
 
-  if (!svg) return;
+      const sameDirection =
+        connection.from.nodeId === a.nodeId &&
+        connection.from.terminalId === a.terminalId &&
+        connection.to.nodeId === b.nodeId &&
+        connection.to.terminalId === b.terminalId;
+
+
+      const reverseDirection =
+        connection.from.nodeId === b.nodeId &&
+        connection.from.terminalId === b.terminalId &&
+        connection.to.nodeId === a.nodeId &&
+        connection.to.terminalId === a.terminalId;
+
+
+      return (
+        sameDirection ||
+        reverseDirection
+      );
+
+    }
+  );
+
+}
+
+
+/* =========================================================
+   RENDER WIRES
+========================================================= */
+
+function renderWires() {
+
+  const svg =
+    $("#wireLayer");
+
+  const board =
+    $("#board");
+
+  const rect =
+    board.getBoundingClientRect();
+
+
+  svg.setAttribute(
+    "viewBox",
+    `0 0 ${rect.width} ${rect.height}`
+  );
+
 
   svg.innerHTML = "";
 
-  S.connections.forEach(connection => {
 
-    const a =
-      S.nodes.find(n =>
-        n.id === connection.fromNode
-      );
+  state.connections.forEach(
+    connection => {
 
-    const b =
-      S.nodes.find(n =>
-        n.id === connection.toNode
-      );
+      const from =
+        getTerminalPosition(
+          connection.from
+        );
 
-    if (!a || !b) return;
+      const to =
+        getTerminalPosition(
+          connection.to
+        );
 
-    const x1 =
-      a.x +
-      (connection.fromTerminal === "positive"
-        ? 155
-        : 0);
 
-    const y1 =
-      a.y + 62;
-
-    const x2 =
-      b.x +
-      (connection.toTerminal === "positive"
-        ? 155
-        : 0);
-
-    const y2 =
-      b.y + 62;
-
-    const curve =
-      Math.max(
-        40,
-        Math.abs(x2 - x1) * 0.45
-      );
-
-    const path =
-      document.createElementNS(
-        "http://www.w3.org/2000/svg",
-        "path"
-      );
-
-    path.setAttribute(
-      "d",
-      `M ${x1} ${y1}
-       C ${x1 + curve} ${y1},
-         ${x2 - curve} ${y2},
-         ${x2} ${y2}`
-    );
-
-    path.setAttribute(
-      "fill",
-      "none"
-    );
-
-    path.setAttribute(
-      "stroke",
-      wireColor(connection)
-    );
-
-    path.setAttribute(
-      "stroke-width",
-      S.selectedWire === connection.id
-        ? "6"
-        : "3"
-    );
-
-    path.setAttribute(
-      "stroke-linecap",
-      "round"
-    );
-
-    path.dataset.wireId =
-      connection.id;
-
-    path.style.pointerEvents = "stroke";
-
-    path.addEventListener(
-      "click",
-      event => {
-
-        event.stopPropagation();
-
-        S.selectedWire =
-          connection.id;
-
-        drawWires();
-
-        showWireInspector(connection);
+      if (!from || !to) {
+        return;
       }
-    );
 
-    svg.appendChild(path);
-  });
+
+      const path =
+        createWirePath(
+          from,
+          to
+        );
+
+
+      const pathElement =
+        document.createElementNS(
+          "http://www.w3.org/2000/svg",
+          "path"
+        );
+
+
+      pathElement.setAttribute(
+        "d",
+        path
+      );
+
+
+      pathElement.classList.add(
+        "wire"
+      );
+
+
+      if (
+        connection.mode === "series"
+      ) {
+        pathElement.classList.add(
+          "series"
+        );
+      }
+
+
+      if (
+        connection.mode === "parallel"
+      ) {
+        pathElement.classList.add(
+          "parallel"
+        );
+      }
+
+
+      if (
+        connectionHasFault(
+          connection
+        )
+      ) {
+        pathElement.classList.add(
+          "fault"
+        );
+      }
+
+
+      if (
+        state.selectedConnection ===
+        connection.id
+      ) {
+        pathElement.classList.add(
+          "selected"
+        );
+      }
+
+
+      pathElement.dataset.id =
+        connection.id;
+
+
+      pathElement.style.pointerEvents =
+        "stroke";
+
+
+      pathElement.addEventListener(
+        "pointerdown",
+        event => {
+
+          event.stopPropagation();
+
+          state.selectedConnection =
+            connection.id;
+
+          state.selectedNode =
+            null;
+
+          renderWires();
+
+          updateInspector();
+
+        }
+      );
+
+
+      svg.appendChild(
+        pathElement
+      );
+
+    }
+  );
+
 }
 
-/* =========================================================
-   WIRE COLOR
-   ========================================================= */
 
-function wireColor(connection) {
+function createWirePath(
+  a,
+  b
+) {
 
-  if (
-    connection.fromTerminal === "positive" &&
-    connection.toTerminal === "positive"
-  ) {
-    return "#ff5e5e";
-  }
+  const dx =
+    Math.abs(b.x - a.x);
 
-  if (
-    connection.fromTerminal === "negative" &&
-    connection.toTerminal === "negative"
-  ) {
-    return "#58aaff";
-  }
-
-  return "#59e49a";
-}
-
-/* =========================================================
-   WIRE INSPECTOR
-   ========================================================= */
-
-function showWireInspector(connection) {
-
-  const from =
-    S.nodes.find(n =>
-      n.id === connection.fromNode
+  const bend =
+    Math.max(
+      50,
+      dx * .45
     );
 
-  const to =
-    S.nodes.find(n =>
-      n.id === connection.toNode
-    );
 
-  if (!from || !to) return;
-
-  $("inspector").innerHTML = `
-    <h3>Connection</h3>
-
-    <p class="hint">
-      Individual electrical connection
-    </p>
-
-    <div class="property">
-      <span>From</span>
-      <b>${types[from.type].name}</b>
-    </div>
-
-    <div class="property">
-      <span>Terminal</span>
-      <b>${connection.fromTerminal}</b>
-    </div>
-
-    <div class="property">
-      <span>To</span>
-      <b>${types[to.type].name}</b>
-    </div>
-
-    <div class="property">
-      <span>Terminal</span>
-      <b>${connection.toTerminal}</b>
-    </div>
-
-    <button
-      class="fault"
-      id="deleteWire"
-      style="margin-top:18px"
-    >
-      Remove Connection
-    </button>
+  return `
+    M ${a.x} ${a.y}
+    C ${a.x + bend} ${a.y},
+      ${b.x - bend} ${b.y},
+      ${b.x} ${b.y}
   `;
 
-  $("deleteWire").onclick = () => {
-    removeConnection(connection.id);
-  };
 }
 
-/* =========================================================
-   REMOVE CONNECTION
-   ========================================================= */
-
-function removeConnection(id) {
-
-  S.connections =
-    S.connections.filter(
-      c => c.id !== id
-    );
-
-  S.selectedWire = null;
-
-  drawWires();
-
-  detectFaults();
-
-  toast("Connection removed");
-
-  saveSilently();
-
-  resetInspector();
-}
 
 /* =========================================================
-   REMOVE COMPONENT
-   ========================================================= */
+   TERMINAL POSITION
+========================================================= */
 
-function removeNode(id) {
+function getTerminalPosition(
+  endpoint
+) {
 
   const node =
-    S.nodes.find(n => n.id === id);
+    getNode(endpoint.nodeId);
 
-  if (!node) return;
 
-  S.nodes =
-    S.nodes.filter(n => n.id !== id);
-
-  /* Remove all wires connected to node */
-  S.connections =
-    S.connections.filter(
-      c =>
-        c.fromNode !== id &&
-        c.toNode !== id
-    );
-
-  if (S.selectedNode === id) {
-    S.selectedNode = null;
+  if (!node) {
+    return null;
   }
 
-  draw();
 
-  resetInspector();
+  const element =
+    document.querySelector(
+      `.node[data-id="${CSS.escape(node.id)}"]`
+    );
 
-  detectFaults();
 
-  saveSilently();
+  if (!element) {
+    return null;
+  }
 
-  toast(types[node.type].name + " removed");
+
+  const terminal =
+    element.querySelector(
+      `.terminal[data-terminal="${endpoint.terminalId}"]`
+    );
+
+
+  if (!terminal) {
+    return null;
+  }
+
+
+  const board =
+    $("#board");
+
+  const boardRect =
+    board.getBoundingClientRect();
+
+  const terminalRect =
+    terminal.getBoundingClientRect();
+
+
+  return {
+
+    x:
+      terminalRect.left -
+      boardRect.left +
+      terminalRect.width / 2,
+
+    y:
+      terminalRect.top -
+      boardRect.top +
+      terminalRect.height / 2
+
+  };
+
 }
 
-/* =========================================================
-   INSPECTOR
-   ========================================================= */
-
-function selectNode(node) {
-
-  S.selectedNode = node.id;
-  S.selectedWire = null;
-
-  draw();
-
-  const t = types[node.type];
-
-  $("inspector").innerHTML = `
-    <h3>${t.name}</h3>
-
-    <p class="hint">${t.sub}</p>
-
-    ${t.props.map((p, i) => `
-      <div class="property">
-        <span>
-          ${["Rating", "Specification", "Detail"][i] || "Property"}
-        </span>
-        <b>${p}</b>
-      </div>
-    `).join("")}
-
-    <h4>Terminals</h4>
-
-    <div class="terminalLegend">
-      <span>
-        <i class="dot red"></i>
-        Positive
-      </span>
-
-      <span>
-        <i class="dot blue"></i>
-        Negative
-      </span>
-    </div>
-
-    <p class="hint" style="margin-top:15px">
-      Tap a terminal, then tap another terminal
-      to create one connection.
-    </p>
-
-    <button
-      class="fault"
-      style="margin-top:12px"
-      onclick="removeNode('${node.id}')"
-    >
-      Remove Component
-    </button>
-  `;
-}
-
-function resetInspector() {
-
-  $("inspector").innerHTML = `
-    <h3>Inspector</h3>
-
-    <p class="hint">
-      Select a component or connection.
-    </p>
-  `;
-}
 
 /* =========================================================
    AUTO WIRE
-   ========================================================= */
+========================================================= */
 
-$("autoWire").onclick = () => {
+function autoWire() {
 
-  const order = [
-    "panel",
-    "mppt",
-    "battery",
-    "breaker",
-    "inverter",
-    "load"
-  ];
+  if (
+    state.nodes.length === 0
+  ) {
 
-  /* Add missing components */
-  order.forEach((type, i) => {
-
-    if (!S.nodes.some(n => n.type === type)) {
-
-      add(
-        type,
-        40 + i * 180,
-        230
-      );
-    }
-  });
-
-  /* Position */
-  order.forEach((type, i) => {
-
-    const node =
-      S.nodes.find(n =>
-        n.type === type
-      );
-
-    if (!node) return;
-
-    node.x = 40 + i * 180;
-    node.y = 230;
-  });
-
-  /* Clear previous wires */
-  S.connections = [];
-
-  const nodes =
-    order.map(type =>
-      S.nodes.find(n =>
-        n.type === type
-      )
+    toast(
+      "Add components first.",
+      true
     );
 
-  for (let i = 0; i < nodes.length - 1; i++) {
+    return;
+  }
 
-    const a = nodes[i];
-    const b = nodes[i + 1];
 
-    if (!a || !b) continue;
+  saveHistory();
 
-    createConnection(
-      a.id,
+
+  /*
+    Find nodes by type.
+  */
+
+  const panels =
+    state.nodes.filter(
+      n => n.type === "panel"
+    );
+
+  const mppt =
+    state.nodes.find(
+      n => n.type === "mppt"
+    );
+
+  const battery =
+    state.nodes.find(
+      n => n.type === "battery"
+    );
+
+  const breaker =
+    state.nodes.find(
+      n => n.type === "breaker"
+    );
+
+  const inverter =
+    state.nodes.find(
+      n => n.type === "inverter"
+    );
+
+  const load =
+    state.nodes.find(
+      n => n.type === "load"
+    );
+
+
+  /*
+    PV panels parallel into MPPT.
+  */
+
+  if (mppt) {
+
+    panels.forEach(panel => {
+
+      safeCreateConnection(
+        panel,
+        "positive",
+        mppt,
+        "positive",
+        "parallel"
+      );
+
+
+      safeCreateConnection(
+        panel,
+        "negative",
+        mppt,
+        "negative",
+        "parallel"
+      );
+
+    });
+
+  }
+
+
+  /*
+    MPPT to battery.
+  */
+
+  if (
+    mppt &&
+    battery
+  ) {
+
+    safeCreateConnection(
+      mppt,
       "positive",
-      b.id,
-      "negative"
+      battery,
+      "positive",
+      "single"
     );
+
+
+    safeCreateConnection(
+      mppt,
+      "negative",
+      battery,
+      "negative",
+      "single"
+    );
+
   }
 
-  draw();
 
-  toast("Series connection created");
-};
-
-/* =========================================================
-   CLEAR WORKSPACE
-   ========================================================= */
-
-$("clear").onclick = () => {
-
-  if (!confirm("Clear all components and connections?")) {
-    return;
-  }
-
-  S.nodes = [];
-  S.connections = [];
-
-  S.selectedNode = null;
-  S.selectedWire = null;
-
-  draw();
-
-  resetInspector();
-
-  saveSilently();
-
-  toast("Workspace cleared");
-};
-
-/* =========================================================
-   DEMO
-   ========================================================= */
-
-$("loadDemo").onclick = () => {
-
-  $("pname").value =
-    "SolarLab Demo System";
-
-  readSetup();
-
-  S.nodes = [];
-  S.connections = [];
-
-  const demo = [
-    ["panel", 40, 230],
-    ["mppt", 220, 230],
-    ["battery", 400, 230],
-    ["breaker", 580, 230],
-    ["inverter", 760, 230],
-    ["load", 940, 230],
-    ["meter", 760, 400]
-  ];
-
-  demo.forEach(([type, x, y]) => {
-    S.nodes.push({
-      id: uid("node"),
-      type,
-      x,
-      y
-    });
-  });
-
-  const find = type =>
-    S.nodes.find(n => n.type === type);
-
-  const series = [
-    ["panel", "mppt"],
-    ["mppt", "battery"],
-    ["battery", "breaker"],
-    ["breaker", "inverter"],
-    ["inverter", "load"]
-  ];
-
-  series.forEach(([a, b]) => {
-
-    const A = find(a);
-    const B = find(b);
-
-    S.connections.push({
-      id: uid("wire"),
-      fromNode: A.id,
-      fromTerminal: "positive",
-      toNode: B.id,
-      toTerminal: "negative"
-    });
-  });
-
-  draw();
-
-  show("design");
-
-  toast("Demo system loaded");
-};
-
-/* =========================================================
-   KEYBOARD DELETE
-   ========================================================= */
-
-document.addEventListener("keydown", event => {
+  /*
+    Battery through breaker.
+  */
 
   if (
-    event.key !== "Delete" &&
-    event.key !== "Backspace"
+    battery &&
+    breaker
+  ) {
+
+    safeCreateConnection(
+      battery,
+      "positive",
+      breaker,
+      "positive",
+      "single"
+    );
+
+    safeCreateConnection(
+      battery,
+      "negative",
+      breaker,
+      "negative",
+      "single"
+    );
+
+  }
+
+
+  /*
+    Breaker to inverter.
+  */
+
+  if (
+    breaker &&
+    inverter
+  ) {
+
+    safeCreateConnection(
+      breaker,
+      "positive",
+      inverter,
+      "positive",
+      "single"
+    );
+
+    safeCreateConnection(
+      breaker,
+      "negative",
+      inverter,
+      "negative",
+      "single"
+    );
+
+  }
+
+
+  /*
+    Inverter AC to load.
+  */
+
+  if (
+    inverter &&
+    load
+  ) {
+
+    safeCreateConnection(
+      inverter,
+      "ac",
+      load,
+      "ac",
+      "single"
+    );
+
+  }
+
+
+  state.mode = "select";
+
+  setMode("select");
+
+  renderAll();
+
+  toast(
+    "Auto Wire completed. Review every connection before simulation."
+  );
+
+}
+
+
+/* =========================================================
+   SAFE AUTO CONNECTION
+========================================================= */
+
+function safeCreateConnection(
+  nodeA,
+  terminalA,
+  nodeB,
+  terminalB,
+  mode
+) {
+
+  const a = {
+    nodeId: nodeA.id,
+    terminalId: terminalA
+  };
+
+  const b = {
+    nodeId: nodeB.id,
+    terminalId: terminalB
+  };
+
+
+  if (
+    connectionExists(a,b)
   ) {
     return;
   }
 
-  /* Do not delete while typing */
-  const tag =
-    document.activeElement?.tagName;
+
+  state.connections.push({
+
+    id:
+      `wire-${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2, 6)}`,
+
+    from: a,
+
+    to: b,
+
+    mode,
+
+    created:
+      new Date().toISOString()
+
+  });
+
+}
+
+
+/* =========================================================
+   REMOVE SELECTED
+========================================================= */
+
+function removeSelected() {
 
   if (
-    tag === "INPUT" ||
-    tag === "TEXTAREA" ||
-    tag === "SELECT"
+    state.selectedConnection
+  ) {
+
+    saveHistory();
+
+    state.connections =
+      state.connections.filter(
+        connection =>
+          connection.id !==
+          state.selectedConnection
+      );
+
+
+    state.selectedConnection =
+      null;
+
+
+    renderAll();
+
+    toast(
+      "Connection removed."
+    );
+
+    return;
+  }
+
+
+  if (
+    state.selectedNode
+  ) {
+
+    saveHistory();
+
+
+    const nodeId =
+      state.selectedNode;
+
+
+    state.connections =
+      state.connections.filter(
+        connection =>
+          connection.from.nodeId !== nodeId &&
+          connection.to.nodeId !== nodeId
+      );
+
+
+    state.nodes =
+      state.nodes.filter(
+        node =>
+          node.id !== nodeId
+      );
+
+
+    state.selectedNode =
+      null;
+
+
+    renderAll();
+
+    toast(
+      "Component and its connections removed."
+    );
+
+    return;
+  }
+
+
+  toast(
+    "Select a component or connection first.",
+    true
+  );
+
+}
+
+
+/* =========================================================
+   CLEAR BOARD
+========================================================= */
+
+function clearBoard() {
+
+  if (
+    !state.nodes.length &&
+    !state.connections.length
   ) {
     return;
   }
 
-  if (S.selectedWire) {
 
-    removeConnection(
-      S.selectedWire
+  if (
+    !confirm(
+      "Clear all components and connections?"
+    )
+  ) {
+    return;
+  }
+
+
+  saveHistory();
+
+
+  state.nodes = [];
+
+  state.connections = [];
+
+  state.selectedNode = null;
+
+  state.selectedConnection = null;
+
+  state.pendingTerminal = null;
+
+  renderAll();
+
+  toast(
+    "Workspace cleared."
+  );
+
+}
+
+
+/* =========================================================
+   UNDO
+========================================================= */
+
+function saveHistory() {
+
+  state.history.push(
+    JSON.stringify({
+      nodes: state.nodes,
+      connections: state.connections
+    })
+  );
+
+
+  if (
+    state.history.length > 30
+  ) {
+    state.history.shift();
+  }
+
+}
+
+
+function undo() {
+
+  const previous =
+    state.history.pop();
+
+
+  if (!previous) {
+
+    toast(
+      "Nothing to undo.",
+      true
     );
 
     return;
   }
 
-  if (S.selectedNode) {
 
-    removeNode(
-      S.selectedNode
-    );
+  const data =
+    JSON.parse(previous);
+
+
+  state.nodes =
+    data.nodes || [];
+
+
+  state.connections =
+    data.connections || [];
+
+
+  state.selectedNode = null;
+
+  state.selectedConnection = null;
+
+  renderAll();
+
+  toast(
+    "Previous workspace state restored."
+  );
+
+}
+
+
+/* =========================================================
+   INSPECTOR
+========================================================= */
+
+function updateInspector() {
+
+  const container =
+    $("#inspectorContent");
+
+
+  if (
+    state.selectedConnection
+  ) {
+
+    const connection =
+      state.connections.find(
+        item =>
+          item.id ===
+          state.selectedConnection
+      );
+
+
+    if (!connection) {
+      return;
+    }
+
+
+    const fromNode =
+      getNode(
+        connection.from.nodeId
+      );
+
+    const toNode =
+      getNode(
+        connection.to.nodeId
+      );
+
+
+    container.innerHTML = `
+
+      <h3>Connection Inspector</h3>
+
+      <div class="inspectorRow">
+        <span>Type</span>
+        <strong>
+          ${connection.mode.toUpperCase()}
+        </strong>
+      </div>
+
+      <div class="inspectorRow">
+        <span>From</span>
+        <strong>
+          ${escapeHTML(fromNode?.label || "Unknown")}
+        </strong>
+      </div>
+
+      <div class="inspectorRow">
+        <span>Terminal</span>
+        <strong>
+          ${connection.from.terminalId}
+        </strong>
+      </div>
+
+      <div class="inspectorRow">
+        <span>To</span>
+        <strong>
+          ${escapeHTML(toNode?.label || "Unknown")}
+        </strong>
+      </div>
+
+      <div class="inspectorRow">
+        <span>Terminal</span>
+        <strong>
+          ${connection.to.terminalId}
+        </strong>
+      </div>
+
+      <button
+        class="secondary"
+        id="inspectorRemoveConnection"
+        style="width:100%;margin-top:12px;"
+      >
+        Remove Connection
+      </button>
+    `;
+
+
+    $("#inspectorRemoveConnection")
+      .addEventListener(
+        "click",
+        removeSelected
+      );
+
+
+    return;
   }
-});
+
+
+  if (
+    !state.selectedNode
+  ) {
+
+    container.innerHTML = `
+
+      <h3>Inspector</h3>
+
+      <p class="hint">
+        Select a component to view its
+        properties and terminals.
+      </p>
+
+    `;
+
+    return;
+  }
+
+
+  const node =
+    getNode(
+      state.selectedNode
+    );
+
+
+  if (!node) {
+    return;
+  }
+
+
+  const connected =
+    countConnections(node.id);
+
+
+  container.innerHTML = `
+
+    <h3>${escapeHTML(node.label)}</h3>
+
+    <div class="inspectorRow">
+      <span>Component</span>
+      <strong>${node.type}</strong>
+    </div>
+
+    <div class="inspectorRow">
+      <span>Voltage</span>
+      <strong>${node.voltage} V</strong>
+    </div>
+
+    <div class="inspectorRow">
+      <span>Power</span>
+      <strong>${node.power || 0} W</strong>
+    </div>
+
+    <div class="inspectorRow">
+      <span>Connections</span>
+      <strong>${connected}</strong>
+    </div>
+
+    <div class="terminalList">
+
+      <h4>Terminals</h4>
+
+      ${node.terminals.map(
+        terminal => `
+
+          <div class="terminalItem">
+
+            <span>
+              ${terminal.id.toUpperCase()}
+            </span>
+
+            <span class="${terminal.type}">
+              ${terminal.type}
+            </span>
+
+          </div>
+
+        `
+      ).join("")}
+
+    </div>
+
+    <button
+      class="secondary"
+      id="inspectorRemove"
+      style="width:100%;margin-top:12px;"
+    >
+      🗑 Remove Component
+    </button>
+  `;
+
+
+  $("#inspectorRemove")
+    .addEventListener(
+      "click",
+      removeSelected
+    );
+
+}
+
+
+/* =========================================================
+   CONNECTION LIST
+========================================================= */
+
+function renderConnectionList() {
+
+  const container =
+    $("#connectionList");
+
+
+  if (
+    !state.connections.length
+  ) {
+
+    container.innerHTML = `
+      <div class="emptyList">
+        No connections yet.
+      </div>
+    `;
+
+    return;
+  }
+
+
+  container.innerHTML =
+    state.connections.map(
+      connection => {
+
+        const from =
+          getNode(
+            connection.from.nodeId
+          );
+
+        const to =
+          getNode(
+            connection.to.nodeId
+          );
+
+
+        return `
+
+          <div
+            class="connectionItem"
+            data-connection="${connection.id}"
+          >
+
+            <div>
+
+              <strong>
+                ${escapeHTML(from?.label || "?")}
+              </strong>
+
+              <small>
+                :${connection.from.terminalId}
+                →
+                ${escapeHTML(to?.label || "?")}
+                :${connection.to.terminalId}
+              </small>
+
+            </div>
+
+            <small>
+              ${connection.mode.toUpperCase()}
+            </small>
+
+            <button
+              data-remove-connection="${connection.id}"
+            >
+              ×
+            </button>
+
+          </div>
+
+        `;
+
+      }
+    ).join("");
+
+
+  $$("[data-connection]").forEach(
+    element => {
+
+      element.addEventListener(
+        "click",
+        event => {
+
+          if (
+            event.target.dataset
+              .removeConnection
+          ) {
+            return;
+          }
+
+
+          state.selectedConnection =
+            element.dataset.connection;
+
+          state.selectedNode = null;
+
+          renderWires();
+
+          updateInspector();
+
+        }
+      );
+
+    }
+  );
+
+
+  $$("[data-remove-connection]")
+    .forEach(button => {
+
+      button.addEventListener(
+        "click",
+        event => {
+
+          event.stopPropagation();
+
+          saveHistory();
+
+
+          const id =
+            button.dataset
+              .removeConnection;
+
+
+          state.connections =
+            state.connections.filter(
+              connection =>
+                connection.id !== id
+            );
+
+
+          state.selectedConnection =
+            null;
+
+
+          renderAll();
+
+          toast(
+            "Connection removed."
+          );
+
+        }
+      );
+
+    });
+
+}
+
+
+/* =========================================================
+   EXPERIMENT
+========================================================= */
+
+function setupExperiment() {
+
+  $("#sunlight")
+    .addEventListener(
+      "input",
+      updateSimulationPreview
+    );
+
+
+  $("#acLoad")
+    .addEventListener(
+      "input",
+      updateSimulationPreview
+    );
+
+
+  $("#batterySOC")
+    .addEventListener(
+      "input",
+      updateSimulationPreview
+    );
+
+
+  $("#simulate")
+    .addEventListener(
+      "click",
+      toggleSimulation
+    );
+
+}
+
+
+function calculatePVOutput() {
+
+  const sunlight =
+    Number(
+      $("#sunlight").value
+    );
+
+
+  const panels =
+    Number(
+      $("#panelCount").value
+    );
+
+
+  const panelW =
+    Number(
+      $("#panelRating").value
+    );
+
+
+  return (
+    panels *
+    panelW *
+    (sunlight / 100)
+  );
+
+}
+
+
+function updateSimulationPreview() {
+
+  const sunlight =
+    Number(
+      $("#sunlight").value
+    );
+
+
+  const load =
+    Number(
+      $("#acLoad").value
+    );
+
+
+  const soc =
+    Number(
+      $("#batterySOC").value
+    );
+
+
+  const pv =
+    calculatePVOutput();
+
+
+  const inverter =
+    Number(
+      $("#inverterRating").value
+    );
+
+
+  const inverterPercent =
+    inverter > 0
+      ? (load / inverter) * 100
+      : 0;
+
+
+  $("#sunlightOutput").textContent =
+    `${sunlight}%`;
+
+
+  $("#metricPV").textContent =
+    `${(pv / 1000).toFixed(2)} kW`;
+
+
+  $("#metricLoad").textContent =
+    `${(load / 1000).toFixed(2)} kW`;
+
+
+  $("#metricSOC").textContent =
+    `${soc}%`;
+
+
+  $("#metricInverter").textContent =
+    `${inverterPercent.toFixed(0)}%`;
+
+
+  $("#flowPV").textContent =
+    `${Math.round(pv)} W`;
+
+
+  $("#flowLoad").textContent =
+    `${Math.round(load)} W`;
+
+
+  $("#flowBattery").textContent =
+    `${soc}% SOC`;
+
+
+  $("#flowInverter").textContent =
+    `${inverterPercent.toFixed(0)}%`;
+
+
+  if (
+    state.simulationRunning
+  ) {
+
+    $("#simulationState")
+      .textContent =
+      "RUNNING";
+
+    $("#powerBeam")
+      .classList.add(
+        "running"
+      );
+
+  }
+
+
+  updateSystemFaults();
+
+}
+
 
 /* =========================================================
    SIMULATION
-   ========================================================= */
+========================================================= */
 
-function calc() {
+function toggleSimulation() {
 
-  const pv =
-    S.panels *
-    S.pw *
-    S.sun /
-    100 /
-    1000;
+  state.simulationRunning =
+    !state.simulationRunning;
 
-  const load =
-    S.load / 1000;
-
-  const inv =
-    load /
-    (S.iw / 1000) *
-    100;
-
-  return {
-    pv,
-    load,
-    inv,
-
-    prod: pv * 6,
-
-    demand:
-      load * 24
-  };
-}
-
-/* =========================================================
-   FAULT ENGINE
-   ========================================================= */
-
-function detectFaults() {
-
-  const faults = [];
-
-  const c = calc();
-
-  /* Inverter overload */
-  if (c.inv > 100) {
-    faults.push(
-      "INVERTER OVERLOAD"
-    );
-  }
-
-  /* Connection polarity */
-  S.connections.forEach(connection => {
-
-    if (
-      connection.fromTerminal ===
-      connection.toTerminal
-    ) {
-
-      faults.push(
-        "POLARITY / TERMINAL ERROR"
-      );
-    }
-  });
-
-  /* Open circuit */
-  const requiredTypes = [
-    "panel",
-    "mppt",
-    "battery",
-    "inverter",
-    "load"
-  ];
-
-  const hasAll =
-    requiredTypes.every(type =>
-      S.nodes.some(n =>
-        n.type === type
-      )
-    );
 
   if (
-    hasAll &&
-    S.connections.length === 0
+    state.simulationRunning
   ) {
-    faults.push(
-      "OPEN CIRCUIT"
-    );
-  }
 
-  /* Very simple short-circuit detection */
-  S.connections.forEach(connection => {
+    $("#simulate")
+      .textContent =
+      "■ Stop Simulation";
 
-    if (
-      connection.fromNode ===
-      connection.toNode
-    ) {
 
-      faults.push(
-        "SHORT CIRCUIT"
-      );
-    }
-  });
+    $("#simulationMessage")
+      .textContent =
+      "Simulation running. Electrical behaviour is being evaluated.";
 
-  /* Battery direct PV warning */
-  S.connections.forEach(connection => {
 
-    const a =
-      S.nodes.find(n =>
-        n.id === connection.fromNode
+    $("#simulationState")
+      .textContent =
+      "RUNNING";
+
+
+    $("#powerBeam")
+      .classList.add(
+        "running"
       );
 
-    const b =
-      S.nodes.find(n =>
-        n.id === connection.toNode
-      );
 
-    if (!a || !b) return;
+    simulationTick();
 
-    const pair = [
-      a.type,
-      b.type
-    ].sort().join("-");
-
-    if (pair === "battery-panel") {
-
-      faults.push(
-        "PV DIRECT BATTERY CONNECTION"
-      );
-    }
-  });
-
-  if (faults.length) {
-
-    S.fault =
-      [...new Set(faults)].join(" | ");
 
   } else {
 
-    S.fault = "";
+    $("#simulate")
+      .textContent =
+      "▶ Start Simulation";
+
+
+    $("#simulationState")
+      .textContent =
+      "PAUSED";
+
+
+    $("#powerBeam")
+      .classList.remove(
+        "running"
+      );
+
   }
 
-  updateFaultBox();
 }
+
+
+function simulationTick() {
+
+  if (
+    !state.simulationRunning
+  ) {
+    return;
+  }
+
+
+  state.simulationSeconds++;
+
+
+  const hours =
+    Math.floor(
+      state.simulationSeconds / 3600
+    );
+
+
+  const minutes =
+    Math.floor(
+      (state.simulationSeconds % 3600) /
+      60
+    );
+
+
+  const seconds =
+    state.simulationSeconds %
+    60;
+
+
+  $("#simulationTime")
+    .textContent =
+    `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+
+
+  updateSimulationPreview();
+
+
+  setTimeout(
+    simulationTick,
+    1000
+  );
+
+}
+
+
+/* =========================================================
+   FAULT LAB
+========================================================= */
+
+function setupFaults() {
+
+  $("#faultOverload")
+    .addEventListener(
+      "click",
+      () => {
+
+        addFault("overload");
+
+        renderAll();
+
+      }
+    );
+
+
+  $("#faultPolarity")
+    .addEventListener(
+      "click",
+      () => {
+
+        addFault("polarity");
+
+        renderAll();
+
+      }
+    );
+
+
+  $("#faultShort")
+    .addEventListener(
+      "click",
+      () => {
+
+        addFault("short");
+
+        renderAll();
+
+      }
+    );
+
+
+  $("#faultVoltage")
+    .addEventListener(
+      "click",
+      () => {
+
+        addFault("voltage");
+
+        renderAll();
+
+      }
+    );
+
+
+  $("#clearFaults")
+    .addEventListener(
+      "click",
+      () => {
+
+        state.faults = [];
+
+        renderAll();
+
+        toast(
+          "Faults cleared."
+        );
+
+      }
+    );
+
+}
+
+
+function addFault(type) {
+
+  if (
+    !state.faults.includes(type)
+  ) {
+
+    state.faults.push(type);
+
+  }
+
+
+  updateFaultBox();
+
+}
+
 
 function updateFaultBox() {
 
-  const box = $("faultBox");
+  const box =
+    $("#faultBox");
 
-  if (!box) return;
 
-  if (S.fault) {
-
-    box.className =
-      "status danger";
-
-    box.textContent =
-      "⚠ " + S.fault;
-
-  } else {
+  if (
+    !state.faults.length
+  ) {
 
     box.className =
       "status ok";
 
     box.textContent =
       "● No active faults";
+
+    return;
+
   }
+
+
+  const names = {
+
+    overload:
+      "⚡ Inverter / system overload",
+
+    polarity:
+      "＋/− Wrong polarity",
+
+    short:
+      "🔥 Short circuit detected",
+
+    voltage:
+      "⚠ Voltage mismatch",
+
+    open:
+      "○ Open circuit",
+
+    duplicate:
+      "Duplicate connection"
+
+  };
+
+
+  box.className =
+    "status error";
+
+
+  box.innerHTML =
+    state.faults.map(
+      fault =>
+        `● ${names[fault] || fault}`
+    ).join("<br>");
+
 }
 
-/* =========================================================
-   EXPERIMENT UI
-   ========================================================= */
 
-function updateExperiment() {
+function updateSystemFaults() {
 
-  S.sun =
-    Number($("sun").value);
-
-  S.load =
-    Number($("loadW").value);
-
-  S.soc =
-    Math.max(
-      0,
-      Math.min(
-        100,
-        Number($("socW").value)
-      )
+  const load =
+    Number(
+      $("#acLoad").value
     );
 
-  const c = calc();
 
-  $("sunOut").textContent =
-    S.sun + "%";
-
-  $("mPV").textContent =
-    c.pv.toFixed(2) + " kW";
-
-  $("mLoad").textContent =
-    c.load.toFixed(2) + " kW";
-
-  $("mSOC").textContent =
-    S.soc + "%";
-
-  $("mInv").textContent =
-    c.inv.toFixed(0) + "%";
-
-  $("pvNode").textContent =
-    c.pv.toFixed(2) + " kW";
-
-  $("loadNode").textContent =
-    S.load + " W";
-
-  $("batNode").textContent =
-    S.soc + "% SOC";
-
-  $("invNode").textContent =
-    c.inv.toFixed(0) + "% load";
-
-  detectFaults();
-
-  $("simNote").textContent =
-    S.running
-      ? S.fault
-        ? "Fault condition active. Protection response simulated."
-        : "Power is flowing through the virtual system."
-      : "System ready. Start simulation to see live power flow.";
-}
-
-["sun", "loadW", "socW"].forEach(id => {
-
-  $(id).addEventListener(
-    "input",
-    () => {
-      updateExperiment();
-    }
-  );
-});
-
-/* =========================================================
-   START / STOP
-   ========================================================= */
-
-$("simulate").onclick = () => {
-
-  S.running =
-    !S.running;
-
-  $("simulate").textContent =
-    S.running
-      ? "■ Stop Simulation"
-      : "▶ Start Simulation";
-
-  $("simState").textContent =
-    S.running
-      ? "RUNNING"
-      : "READY";
-
-  updateExperiment();
-
-  toast(
-    S.running
-      ? "Simulation started"
-      : "Simulation stopped"
-  );
-};
-
-/* =========================================================
-   FAULT BUTTONS
-   ========================================================= */
-
-$("overload").onclick = () => {
-
-  S.fault =
-    "INVERTER OVERLOAD";
-
-  S.load =
-    Math.max(
-      S.iw * 1.25,
-      6500
+  const inverter =
+    Number(
+      $("#inverterRating").value
     );
 
-  $("loadW").value =
-    S.load;
 
-  updateExperiment();
+  /*
+    Remove automatic overload
+    before recalculating.
+  */
 
-  toast("Overload test triggered");
-};
+  state.faults =
+    state.faults.filter(
+      fault =>
+        ![
+          "auto-overload",
+          "auto-open"
+        ].includes(fault)
+    );
 
-$("reverse").onclick = () => {
 
-  S.fault =
-    "WRONG POLARITY";
+  if (
+    load > inverter
+  ) {
+
+    state.faults.push(
+      "auto-overload"
+    );
+
+  }
+
+
+  /*
+    Detect incomplete essential
+    system.
+  */
+
+  const requiredTypes =
+    [
+      "panel",
+      "mppt",
+      "battery",
+      "inverter",
+      "load"
+    ];
+
+
+  const missing =
+    requiredTypes.filter(
+      type =>
+        !state.nodes.some(
+          node =>
+            node.type === type
+        )
+    );
+
+
+  if (
+    state.nodes.length > 0 &&
+    missing.length
+  ) {
+
+    state.faults.push(
+      "auto-open"
+    );
+
+  }
+
 
   updateFaultBox();
 
-  $("simNote").textContent =
-    "Wrong polarity fault simulated.";
+}
 
-  toast("Wrong polarity test triggered");
-};
-
-$("short").onclick = () => {
-
-  S.fault =
-    "SHORT CIRCUIT";
-
-  updateFaultBox();
-
-  $("simNote").textContent =
-    "Short circuit protection simulated.";
-
-  toast("Short-circuit test triggered");
-};
 
 /* =========================================================
-   TIMER
-   ========================================================= */
+   FAULT HELPERS
+========================================================= */
 
-setInterval(() => {
+function nodeHasError(
+  nodeId
+) {
 
-  if (!S.running) return;
-
-  S.seconds++;
-
-  const h =
-    String(
-      Math.floor(
-        S.seconds / 3600
+  return state.connections.some(
+    connection =>
+      connectionHasFault(
+        connection
+      ) &&
+      (
+        connection.from.nodeId ===
+        nodeId ||
+        connection.to.nodeId ===
+        nodeId
       )
-    ).padStart(2, "0");
+  );
 
-  const m =
-    String(
-      Math.floor(
-        S.seconds / 60
-      ) % 60
-    ).padStart(2, "0");
+}
 
-  const s =
-    String(
-      S.seconds % 60
-    ).padStart(2, "0");
 
-  $("simTime").textContent =
-    `${h}:${m}:${s}`;
+function connectionHasFault(
+  connection
+) {
 
-}, 1000);
+  const a =
+    getNode(
+      connection.from.nodeId
+    );
+
+  const b =
+    getNode(
+      connection.to.nodeId
+    );
+
+
+  if (!a || !b) {
+    return true;
+  }
+
+
+  if (
+    connection.from.terminalId ===
+      connection.to.terminalId &&
+    connection.from.terminalId !==
+      "ac"
+  ) {
+
+    return true;
+
+  }
+
+
+  if (
+    connection.from.terminalId ===
+      "ac" &&
+    connection.to.terminalId !==
+      "ac"
+  ) {
+
+    return true;
+
+  }
+
+
+  if (
+    connection.to.terminalId ===
+      "ac" &&
+    connection.from.terminalId !==
+      "ac"
+  ) {
+
+    return true;
+
+  }
+
+
+  return false;
+
+}
+
 
 /* =========================================================
    ANALYSIS
-   ========================================================= */
+========================================================= */
 
-function analysis() {
+function runAnalysis() {
 
-  const c = calc();
+  updateSystemFaults();
+
+
+  const pv =
+    calculatePVOutput();
+
+
+  const load =
+    Number(
+      $("#acLoad").value
+    );
+
+
+  const inverter =
+    Number(
+      $("#inverterRating").value
+    );
+
+
+  const validConnections =
+    state.connections.filter(
+      connection =>
+        !connectionHasFault(
+          connection
+        )
+    ).length;
+
+
+  const totalConnections =
+    state.connections.length;
+
 
   let score = 100;
 
-  if (c.inv > 100)
-    score -= 35;
 
-  if (c.prod < c.demand)
-    score -= 15;
+  if (
+    state.nodes.length === 0
+  ) {
+    score -= 40;
+  }
 
-  if (S.fault)
+
+  if (
+    totalConnections === 0
+  ) {
+    score -= 25;
+  }
+
+
+  if (
+    state.faults.length
+  ) {
+    score -=
+      Math.min(
+        40,
+        state.faults.length * 8
+      );
+  }
+
+
+  if (
+    totalConnections > 0 &&
+    validConnections ===
+      totalConnections
+  ) {
+    score += 5;
+  }
+
+
+  if (
+    load > inverter
+  ) {
     score -= 20;
+  }
 
-  if (!S.connections.length)
-    score -= 10;
 
   score =
-    Math.max(
+    clamp(
+      score,
       0,
-      Math.round(score)
+      100
     );
 
-  $("score").textContent =
-    score;
 
-  $("checks").innerHTML = [
+  $("#designScore")
+    .textContent =
+    Math.round(score);
 
-    ["PV array",
-      `${c.pv.toFixed(2)} kW`],
 
-    ["AC demand",
-      `${S.load} W`],
+  const checks =
+    [];
 
-    ["Inverter utilization",
-      `${c.inv.toFixed(0)}%`],
 
-    ["Daily PV estimate",
-      `${c.prod.toFixed(1)} kWh`],
+  if (
+    state.nodes.length
+  ) {
 
-    ["Daily load estimate",
-      `${c.demand.toFixed(1)} kWh`],
+    checks.push(
+      createCheck(
+        "ok",
+        `${state.nodes.length} component(s) placed.`
+      )
+    );
 
-    ["Connections",
-      `${S.connections.length}`],
+  } else {
 
-    ["Fault state",
-      S.fault || "Normal"]
+    checks.push(
+      createCheck(
+        "warning",
+        "No components placed."
+      )
+    );
 
-  ].map(item => `
-    <div class="check">
-      ${item[0]}
-      <b>${item[1]}</b>
-    </div>
-  `).join("");
-
-  $("chart").innerHTML = "";
-
-  for (let i = 0; i < 24; i++) {
-
-    const energy =
-      Math.max(
-        3,
-        Math.sin(
-          (i - 6) /
-          12 *
-          Math.PI
-        ) * 100
-      );
-
-    const bar =
-      document.createElement("i");
-
-    bar.className =
-      "bar";
-
-    bar.style.height =
-      energy + "%";
-
-    $("chart").appendChild(bar);
   }
+
+
+  if (
+    totalConnections
+  ) {
+
+    checks.push(
+      createCheck(
+        validConnections ===
+          totalConnections
+          ? "ok"
+          : "error",
+
+        `${validConnections}/${totalConnections} connections pass basic validation.`
+      )
+    );
+
+  } else {
+
+    checks.push(
+      createCheck(
+        "warning",
+        "No electrical connections created."
+      )
+    );
+
+  }
+
+
+  if (
+    load <= inverter
+  ) {
+
+    checks.push(
+      createCheck(
+        "ok",
+        "AC load is within inverter rating."
+      )
+    );
+
+  } else {
+
+    checks.push(
+      createCheck(
+        "error",
+        "AC load exceeds inverter rating."
+      )
+    );
+
+  }
+
+
+  if (
+    pv >= load
+  ) {
+
+    checks.push(
+      createCheck(
+        "ok",
+        "Estimated PV output can cover the current AC load."
+      )
+    );
+
+  } else {
+
+    checks.push(
+      createCheck(
+        "warning",
+        "Estimated PV output is below the current AC load."
+      )
+    );
+
+  }
+
+
+  if (
+    state.faults.length
+  ) {
+
+    checks.push(
+      createCheck(
+        "error",
+        `${state.faults.length} active fault condition(s).`
+      )
+    );
+
+  } else {
+
+    checks.push(
+      createCheck(
+        "ok",
+        "No active fault conditions."
+      )
+    );
+
+  }
+
+
+  $("#systemChecks")
+    .innerHTML =
+    checks.join("");
+
+
+  $("#connectionStats")
+    .innerHTML = `
+
+      <div class="inspectorRow">
+        <span>Components</span>
+        <strong>
+          ${state.nodes.length}
+        </strong>
+      </div>
+
+      <div class="inspectorRow">
+        <span>Total Wires</span>
+        <strong>
+          ${state.connections.length}
+        </strong>
+      </div>
+
+      <div class="inspectorRow">
+        <span>Valid Wires</span>
+        <strong>
+          ${validConnections}
+        </strong>
+      </div>
+
+      <div class="inspectorRow">
+        <span>PV Output</span>
+        <strong>
+          ${(pv / 1000).toFixed(2)} kW
+        </strong>
+      </div>
+
+      <div class="inspectorRow">
+        <span>AC Load</span>
+        <strong>
+          ${(load / 1000).toFixed(2)} kW
+        </strong>
+      </div>
+
+    `;
+
+
+  generateChart();
+
 }
+
+
+function createCheck(
+  type,
+  message
+) {
+
+  return `
+    <div class="check ${type}">
+      ${type === "ok" ? "✓" : type === "error" ? "✕" : "⚠"}
+      ${escapeHTML(message)}
+    </div>
+  `;
+
+}
+
+
+/* =========================================================
+   ENERGY CHART
+========================================================= */
+
+function generateChart() {
+
+  const chart =
+    $("#energyChart");
+
+
+  const values =
+    Array.from(
+      { length: 24 },
+      (_, hour) => {
+
+        const solar =
+          Math.max(
+            0,
+            Math.sin(
+              ((hour - 6) / 12) *
+              Math.PI
+            )
+          );
+
+
+        return solar;
+
+      }
+    );
+
+
+  chart.innerHTML = `
+
+    <div class="chartBar">
+
+      ${values.map(
+        value =>
+          `<span style="height:${Math.max(
+            3,
+            value * 100
+          )}%"></span>`
+      ).join("")}
+
+    </div>
+
+    <small class="hint">
+      Simulated relative solar generation from 00:00 to 23:00.
+    </small>
+  `;
+
+}
+
 
 /* =========================================================
    REPORT
-   ========================================================= */
+========================================================= */
 
-function report() {
+function setupReport() {
 
-  const c = calc();
+  $("#printReport")
+    .addEventListener(
+      "click",
+      () => {
 
-  const reportBox =
-    const reportBox =
-    $("reportContent");
+        generateReport();
 
-  if (!reportBox) return;
+        window.print();
 
-  reportBox.innerHTML = `
+      }
+    );
 
-    <h2>${S.name}</h2>
-
-    <p>${S.desc}</p>
-
-    <table>
-
-      <tr>
-        <td>System voltage</td>
-        <td><b>${S.v} V</b></td>
-      </tr>
-
-      <tr>
-        <td>Solar array</td>
-        <td>
-          <b>
-            ${S.panels} × ${S.pw} W =
-            ${(S.panels * S.pw / 1000).toFixed(2)} kWp
-          </b>
-        </td>
-      </tr>
-
-      <tr>
-        <td>Battery bank</td>
-        <td>
-          <b>${S.v} V / ${S.ah} Ah</b>
-        </td>
-      </tr>
-
-      <tr>
-        <td>Inverter</td>
-        <td>
-          <b>${S.iw} W</b>
-        </td>
-      </tr>
-
-      <tr>
-        <td>PV output</td>
-        <td>
-          <b>${c.pv.toFixed(2)} kW</b>
-        </td>
-      </tr>
-
-      <tr>
-        <td>AC load</td>
-        <td>
-          <b>${S.load} W</b>
-        </td>
-      </tr>
-
-      <tr>
-        <td>Battery SOC</td>
-        <td>
-          <b>${S.soc}%</b>
-        </td>
-      </tr>
-
-      <tr>
-        <td>Connections</td>
-        <td>
-          <b>${S.connections.length}</b>
-        </td>
-      </tr>
-
-      <tr>
-        <td>Fault state</td>
-        <td>
-          <b>${S.fault || "Normal"}</b>
-        </td>
-      </tr>
-
-    </table>
-
-    <p
-      style="
-        margin-top:20px;
-        color:#718ba2;
-        font-size:11px
-      "
-    >
-      Educational simulation only.
-      Verify real-world systems with component
-      datasheets, electrical calculations,
-      applicable standards and qualified
-      professionals.
-    </p>
-  `;
 }
+
+
+function generateReport() {
+
+  const pv =
+    calculatePVOutput();
+
+
+  const load =
+    Number(
+      $("#acLoad").value
+    );
+
+
+  const soc =
+    Number(
+      $("#batterySOC").value
+    );
+
+
+  const score =
+    $("#designScore")
+      ?.textContent || "0";
+
+
+  $("#reportContent")
+    .innerHTML = `
+
+      <h2>
+        SolarLab Structure V3
+      </h2>
+
+      <p>
+        ${escapeHTML(
+          $("#projectDescription").value
+        )}
+      </p>
+
+      <table class="reportTable">
+
+        <tr>
+          <td>Project</td>
+          <td>
+            ${escapeHTML(
+              $("#projectName").value
+            )}
+          </td>
+        </tr>
+
+        <tr>
+          <td>System Voltage</td>
+          <td>
+            ${$("#systemVoltage").value} V
+          </td>
+        </tr>
+
+        <tr>
+          <td>PV Panels</td>
+          <td>
+            ${$("#panelCount").value}
+            ×
+            ${$("#panelRating").value} W
+          </td>
+        </tr>
+
+        <tr>
+          <td>Estimated PV Output</td>
+          <td>
+            ${(pv / 1000).toFixed(2)} kW
+          </td>
+        </tr>
+
+        <tr>
+          <td>AC Load</td>
+          <td>
+            ${(load / 1000).toFixed(2)} kW
+          </td>
+        </tr>
+
+        <tr>
+          <td>Battery SOC</td>
+          <td>
+            ${soc}%
+          </td>
+        </tr>
+
+        <tr>
+          <td>Components</td>
+          <td>
+            ${state.nodes.length}
+          </td>
+        </tr>
+
+        <tr>
+          <td>Connections</td>
+          <td>
+            ${state.connections.length}
+          </td>
+        </tr>
+
+        <tr>
+          <td>Active Faults</td>
+          <td>
+            ${state.faults.length}
+          </td>
+        </tr>
+
+        <tr>
+          <td>Design Score</td>
+          <td>
+            ${score}/100
+          </td>
+        </tr>
+
+      </table>
+
+      <p style="margin-top:20px;">
+        Generated by SolarLab Structure V3.
+      </p>
+
+      <p>
+        ⚠ Educational simulation only. Verify all
+        real-world electrical designs using appropriate
+        engineering calculations, standards, datasheets,
+        protection requirements and qualified review.
+      </p>
+
+    `;
+
+}
+
 
 /* =========================================================
    SAVE / LOAD
-   ========================================================= */
+========================================================= */
 
-function saveSilently() {
+function setupSave() {
 
-  try {
-
-    localStorage.setItem(
-      "SolarLabV3",
-      JSON.stringify(S)
+  $("#saveBtn")
+    .addEventListener(
+      "click",
+      saveProject
     );
 
-  } catch (error) {
 
-    console.warn(
-      "Save failed",
-      error
+  $("#loadDemo")
+    .addEventListener(
+      "click",
+      loadDemo
     );
-  }
+
+
+  /*
+    Load project values.
+  */
+
+  [
+    "#projectName",
+    "#projectDescription",
+    "#systemVoltage",
+    "#panelCount",
+    "#panelRating",
+    "#batteryAh",
+    "#inverterRating"
+  ].forEach(selector => {
+
+    $(selector)
+      ?.addEventListener(
+        "change",
+        syncProject
+      );
+
+  });
+
 }
 
-$("save").onclick = () => {
 
-  readSetup();
+function syncProject() {
 
-  saveSilently();
+  state.project = {
+
+    name:
+      $("#projectName").value,
+
+    description:
+      $("#projectDescription").value,
+
+    voltage:
+      Number(
+        $("#systemVoltage").value
+      ),
+
+    panelCount:
+      Number(
+        $("#panelCount").value
+      ),
+
+    panelRating:
+      Number(
+        $("#panelRating").value
+      ),
+
+    batteryAh:
+      Number(
+        $("#batteryAh").value
+      ),
+
+    inverterRating:
+      Number(
+        $("#inverterRating").value
+      )
+
+  };
+
+
+  $("#boardVoltage")
+    .textContent =
+    `${state.project.voltage}V DC / AC`;
+
+}
+
+
+function saveProject() {
+
+  syncProject();
+
+
+  const data = {
+
+    version: "3.0",
+
+    project:
+      state.project,
+
+    nodes:
+      state.nodes,
+
+    connections:
+      state.connections,
+
+    faults:
+      state.faults
+
+  };
+
+
+  localStorage.setItem(
+    "solarlab-v3-project",
+    JSON.stringify(data)
+  );
+
 
   toast(
-    "Project saved locally"
+    "SolarLab V3 project saved on this device."
   );
-};
 
-/* =========================================================
-   LOAD SAVED PROJECT
-   ========================================================= */
+}
 
-function loadSaved() {
+
+function loadProjectData() {
 
   try {
 
     const saved =
       localStorage.getItem(
-        "SolarLabV3"
+        "solarlab-v3-project"
       );
 
-    if (!saved) return;
 
-    const loaded =
+    if (!saved) {
+      return;
+    }
+
+
+    const data =
       JSON.parse(saved);
 
-    S = {
-      ...S,
-      ...loaded
-    };
+
+    if (
+      data.project
+    ) {
+
+      state.project =
+        data.project;
+
+      $("#projectName").value =
+        state.project.name;
+
+      $("#projectDescription").value =
+        state.project.description;
+
+      $("#systemVoltage").value =
+        state.project.voltage;
+
+      $("#panelCount").value =
+        state.project.panelCount;
+
+      $("#panelRating").value =
+        state.project.panelRating;
+
+      $("#batteryAh").value =
+        state.project.batteryAh;
+
+      $("#inverterRating").value =
+        state.project.inverterRating;
+
+    }
+
+
+    state.nodes =
+      Array.isArray(data.nodes)
+        ? data.nodes
+        : [];
+
+
+    state.connections =
+      Array.isArray(data.connections)
+        ? data.connections
+        : [];
+
+
+    state.faults =
+      Array.isArray(data.faults)
+        ? data.faults
+        : [];
+
 
   } catch (error) {
 
-    console.warn(
-      "Could not load project",
+    console.error(
+      "Could not load project:",
       error
     );
+
   }
+
 }
 
-/* =========================================================
-   PRINT
-   ========================================================= */
-
-$("print").onclick = () => {
-  window.print();
-};
 
 /* =========================================================
-   INITIALIZE
-   ========================================================= */
+   DEMO SYSTEM
+========================================================= */
 
-function init() {
+function loadDemo() {
 
-  loadSaved();
+  state.nodes = [];
 
-  $("pname").value =
-    S.name;
+  state.connections = [];
 
-  $("pdesc").value =
-    S.desc;
+  state.faults = [];
 
-  $("voltage").value =
-    S.v;
+  state.history = [];
 
-  $("panelCount").value =
-    S.panels;
 
-  $("panelW").value =
-    S.pw;
+  const board =
+    $("#board");
 
-  $("batteryAh").value =
-    S.ah;
+  const width =
+    board.clientWidth || 800;
 
-  $("inverterW").value =
-    S.iw;
 
-  $("sun").value =
-    S.sun;
+  const center =
+    width / 2;
 
-  $("loadW").value =
-    S.load;
 
-  $("socW").value =
-    S.soc;
+  const panel1 =
+    createDemoNode(
+      "panel",
+      60,
+      100
+    );
 
-  draw();
+  const panel2 =
+    createDemoNode(
+      "panel",
+      60,
+      270
+    );
 
-  updateExperiment();
+  const mppt =
+    createDemoNode(
+      "mppt",
+      center - 80,
+      180
+    );
 
-  analysis();
+  const battery =
+    createDemoNode(
+      "battery",
+      center + 130,
+      180
+    );
+
+  const breaker =
+    createDemoNode(
+      "breaker",
+      center + 330,
+      100
+    );
+
+  const inverter =
+    createDemoNode(
+      "inverter",
+      center + 330,
+      300
+    );
+
+  const load =
+    createDemoNode(
+      "load",
+      center + 520,
+      300
+    );
+
+
+  state.nodes.push(
+    panel1,
+    panel2,
+    mppt,
+    battery,
+    breaker,
+    inverter,
+    load
+  );
+
+
+  safeCreateConnection(
+    panel1,
+    "positive",
+    mppt,
+    "positive",
+    "parallel"
+  );
+
+  safeCreateConnection(
+    panel1,
+    "negative",
+    mppt,
+    "negative",
+    "parallel"
+  );
+
+  safeCreateConnection(
+    panel2,
+    "positive",
+    mppt,
+    "positive",
+    "parallel"
+  );
+
+  safeCreateConnection(
+    panel2,
+    "negative",
+    mppt,
+    "negative",
+    "parallel"
+  );
+
+  safeCreateConnection(
+    mppt,
+    "positive",
+    battery,
+    "positive",
+    "single"
+  );
+
+  safeCreateConnection(
+    mppt,
+    "negative",
+    battery,
+    "negative",
+    "single"
+  );
+
+  safeCreateConnection(
+    battery,
+    "positive",
+    breaker,
+    "positive",
+    "single"
+  );
+
+  safeCreateConnection(
+    battery,
+    "negative",
+    breaker,
+    "negative",
+    "single"
+  );
+
+  safeCreateConnection(
+    breaker,
+    "positive",
+    inverter,
+    "positive",
+    "series"
+  );
+
+  safeCreateConnection(
+    breaker,
+    "negative",
+    inverter,
+    "negative",
+    "series"
+  );
+
+  safeCreateConnection(
+    inverter,
+    "ac",
+    load,
+    "ac",
+    "single"
+  );
+
+
+  state.selectedNode =
+    null;
+
+  state.selectedConnection =
+    null;
+
+
+  renderAll();
+
+  showPage("design");
+
+  toast(
+    "Demo system loaded. Try dragging components and creating additional connections."
+  );
+
 }
 
-init();
 
 /* =========================================================
-   RESPONSIVE RESIZE
-   ========================================================= */
+   DEMO NODE FACTORY
+========================================================= */
+
+function createDemoNode(
+  type,
+  x,
+  y
+) {
+
+  return {
+
+    id:
+      `demo-${type}-${Math.random()
+        .toString(36)
+        .slice(2, 8)}`,
+
+    type,
+
+    x,
+
+    y,
+
+    voltage:
+      COMPONENTS[type].voltage,
+
+    power:
+      COMPONENTS[type].power,
+
+    label:
+      COMPONENTS[type].name,
+
+    terminals:
+      COMPONENTS[type].terminals.map(
+        terminal => ({
+          id: terminal,
+          type: terminal
+        })
+      )
+
+  };
+
+}
+
+
+/* =========================================================
+   GLOBAL RENDER
+========================================================= */
+
+function renderAll() {
+
+  syncProject();
+
+  renderBoard();
+
+  renderConnectionList();
+
+  updateInspector();
+
+  updateFaultBox();
+
+  updateSimulationPreview();
+
+}
+
+
+/* =========================================================
+   TERMINAL VISUAL HELPERS
+========================================================= */
+
+function highlightTerminal(
+  nodeId,
+  terminalId
+) {
+
+  clearTerminalHighlights();
+
+
+  const element =
+    document.querySelector(
+      `.node[data-id="${CSS.escape(nodeId)}"] .terminal[data-terminal="${terminalId}"]`
+    );
+
+
+  element?.classList.add(
+    "selectedTerminal"
+  );
+
+}
+
+
+function clearTerminalHighlights() {
+
+  $$(".selectedTerminal")
+    .forEach(element =>
+      element.classList.remove(
+        "selectedTerminal"
+      )
+    );
+
+}
+
+
+/* =========================================================
+   UTILITY
+========================================================= */
+
+function getNode(id) {
+
+  return state.nodes.find(
+    node =>
+      node.id === id
+  );
+
+}
+
+
+function countConnections(
+  nodeId
+) {
+
+  return state.connections.filter(
+    connection =>
+      connection.from.nodeId === nodeId ||
+      connection.to.nodeId === nodeId
+  ).length;
+
+}
+
+
+function clamp(
+  value,
+  min,
+  max
+) {
+
+  return Math.min(
+    Math.max(
+      value,
+      min
+    ),
+    max
+  );
+
+}
+
+
+function pad(number) {
+
+  return String(number)
+    .padStart(2, "0");
+
+}
+
+
+function escapeHTML(value) {
+
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+
+}
+
+
+let toastTimer = null;
+
+
+function toast(
+  message,
+  error = false
+) {
+
+  const element =
+    $("#toast");
+
+
+  element.textContent =
+    message;
+
+
+  element.className =
+    error
+      ? "show error"
+      : "show";
+
+
+  clearTimeout(
+    toastTimer
+  );
+
+
+  toastTimer =
+    setTimeout(
+      () => {
+
+        element.className = "";
+
+      },
+      3000
+    );
+
+}
+
+
+/* =========================================================
+   WINDOW RESIZE
+========================================================= */
 
 window.addEventListener(
   "resize",
   () => {
 
-    S.nodes.forEach(
-      clampNode
-    );
+    renderWires();
 
-    draw();
   }
+);
+
+
+/* =========================================================
+   KEYBOARD
+========================================================= */
+
+document.addEventListener(
+  "keydown",
+  event => {
+
+    if (
+      event.key === "Delete" ||
+      event.key === "Backspace"
+    ) {
+
+      removeSelected();
+
+    }
+
+
+    if (
+      event.ctrlKey &&
+      event.key.toLowerCase() === "z"
+    ) {
+
+      event.preventDefault();
+
+      undo();
+
+    }
+
+  }
+);
+
+
+/* =========================================================
+   INITIAL MODE
+========================================================= */
+
+setTimeout(
+  () => {
+
+    setMode("select");
+
+  },
+  100
 );
