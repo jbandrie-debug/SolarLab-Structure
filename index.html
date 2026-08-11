@@ -1,123 +1,884 @@
 <!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SolarLab Structure v2</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <!-- CSS -->
-    <link rel="stylesheet" href="./style.css">
+  <title>SolarLab Structure V3</title>
+
+  <link rel="stylesheet" href="./style.css">
 </head>
+
 <body>
-<header>
-  <div class="brand">☀ <b>SolarLab</b> Structure <small>V2 • VIRTUAL ENGINEERING LAB</small></div>
-  <nav>
-  <button data-page="welcome">WELCOME</button>
-  <button data-page="setup">PROJECT SETUP</button>
-  <button data-page="design">3D DESIGN</button>
-  <button data-page="experiment">EXPERIMENT</button>
-  <button data-page="analysis">ANALYSIS</button>
-  <button data-page="report">REPORT</button>
-  <button data-page="support">SUPPORT</button>
-</nav>
-  <button id="save">Save</button>
+
+<header class="topbar">
+
+  <div class="brand">
+    <span class="brandIcon">☀</span>
+    <div>
+      <strong>SolarLab Structure</strong>
+      <small>V3 • INTERACTIVE VIRTUAL ENGINEERING LAB</small>
+    </div>
+  </div>
+
+  <nav class="mainNav">
+    <button data-page="welcome">WELCOME</button>
+    <button data-page="setup">PROJECT SETUP</button>
+    <button data-page="design">3D DESIGN</button>
+    <button data-page="experiment">EXPERIMENT</button>
+    <button data-page="analysis">ANALYSIS</button>
+    <button data-page="report">REPORT</button>
+    <button data-page="support">SUPPORT</button>
+  </nav>
+
+  <button id="saveBtn" class="saveBtn">SAVE</button>
+
 </header>
 
+
 <main>
+
+<!-- =========================================================
+     WELCOME
+========================================================= -->
+
 <section id="welcome" class="page active">
- <div class="hero">
-  <div><em>INTERACTIVE SOLAR SYSTEM SIMULATOR</em>
-   <h1>Design. Connect.<br><span>Experiment.</span></h1>
-   <p>Build a virtual solar power system, connect components, and test electrical behaviour before working on a real installation.</p>
-   <button class="primary" data-page="setup">Start Project →</button>
-   <button class="secondary" id="loadDemo">Load Demo System</button>
-   <div class="badges"><span>● Visual Simulation</span><span>● Fault Testing</span><span>● Power Flow</span></div>
+
+  <div class="hero">
+
+    <div class="heroText">
+
+      <em>INTERACTIVE SOLAR SYSTEM SIMULATOR • V3</em>
+
+      <h1>
+        Design.<br>
+        Connect.<br>
+        <span>Experiment.</span>
+      </h1>
+
+      <p>
+        Build a virtual solar power system, connect electrical
+        components, test different topologies, and trigger
+        simulated faults before working on a real installation.
+      </p>
+
+      <div class="heroButtons">
+
+        <button class="primary" data-page="setup">
+          Start Project →
+        </button>
+
+        <button class="secondary" id="loadDemo">
+          Load Demo System
+        </button>
+
+      </div>
+
+      <div class="badges">
+        <span>● 3D Workspace</span>
+        <span>● Series / Parallel</span>
+        <span>● Fault Testing</span>
+        <span>● Power Flow</span>
+      </div>
+
+    </div>
+
+
+    <div class="heroVisual">
+
+      <div class="sunLarge">☀</div>
+
+      <div class="heroPanel">
+        <span>PV ARRAY</span>
+        <strong>550 W</strong>
+      </div>
+
+      <div class="heroWire"></div>
+
+      <div class="heroBox">
+        <span>MPPT</span>
+        <strong>98%</strong>
+      </div>
+
+      <div class="heroWire"></div>
+
+      <div class="heroBattery">
+        🔋
+        <strong>48V</strong>
+      </div>
+
+      <div class="heroWire"></div>
+
+      <div class="heroBox">
+        <span>INVERTER</span>
+        <strong>5 kW</strong>
+      </div>
+
+    </div>
+
   </div>
-  <div class="heroScene"><div class="sun">☀</div><div class="pvTile">SOLAR<br><b>550W</b></div><div class="heroBattery">🔋<b>48V</b></div><div class="heroInv">INVERTER<br><b>5 kW</b></div></div>
- </div>
+
 </section>
+
+
+<!-- =========================================================
+     SETUP
+========================================================= -->
 
 <section id="setup" class="page">
- <div class="pageHead"><div><em>STEP 01</em><h2>Project Setup</h2><p>Choose the system parameters for your virtual experiment.</p></div></div>
- <div class="setupGrid">
-  <div class="card"><h3>Project Information</h3>
-   <label>Project name<input id="pname" value="SolarLab Test System"></label>
-   <label>Description<textarea id="pdesc">48V solar power system simulation.</textarea></label>
+
+  <div class="pageHead">
+
+    <div>
+      <em>STEP 01</em>
+      <h2>Project Setup</h2>
+      <p>Configure the virtual solar system.</p>
+    </div>
+
   </div>
-  <div class="card"><h3>System Parameters</h3>
-   <div class="two"><label>System voltage<select id="voltage"><option>12</option><option>24</option><option selected>48</option></select></label><label>PV panels<input id="panelCount" type="number" min="1" value="4"></label></div>
-   <div class="two"><label>Panel rating (W)<input id="panelW" type="number" min="50" value="550"></label><label>Battery Ah<input id="batteryAh" type="number" min="20" value="200"></label></div>
-   <label>Inverter rating (W)<input id="inverterW" type="number" min="100" value="5000"></label>
+
+
+  <div class="setupGrid">
+
+    <div class="card">
+
+      <h3>Project Information</h3>
+
+      <label>
+        Project Name
+        <input id="projectName" value="SolarLab V3 Test System">
+      </label>
+
+      <label>
+        Description
+        <textarea id="projectDescription">Interactive 48V solar power system simulation.</textarea>
+      </label>
+
+    </div>
+
+
+    <div class="card">
+
+      <h3>System Parameters</h3>
+
+      <div class="two">
+
+        <label>
+          System Voltage
+          <select id="systemVoltage">
+            <option value="12">12V</option>
+            <option value="24">24V</option>
+            <option value="48" selected>48V</option>
+            <option value="96">96V</option>
+          </select>
+        </label>
+
+        <label>
+          PV Panels
+          <input id="panelCount" type="number" min="1" value="4">
+        </label>
+
+      </div>
+
+
+      <div class="two">
+
+        <label>
+          Panel Rating (W)
+          <input id="panelRating" type="number" min="50" value="550">
+        </label>
+
+        <label>
+          Battery Ah
+          <input id="batteryAh" type="number" min="20" value="200">
+        </label>
+
+      </div>
+
+
+      <label>
+        Inverter Rating (W)
+        <input id="inverterRating" type="number" min="100" value="5000">
+      </label>
+
+    </div>
+
   </div>
- </div>
- <button class="primary" data-page="design">Open 3D Workspace →</button>
+
+
+  <button class="primary" data-page="design">
+    Open 3D Workspace →
+  </button>
+
 </section>
+
+
+<!-- =========================================================
+     DESIGN
+========================================================= -->
 
 <section id="design" class="page">
- <div class="pageHead compact"><div><em>STEP 02</em><h2>3D Design Workspace</h2><p>Add, move and connect components.</p></div>
-  <div class="toolbar"><button id="autoWire">Auto Wire</button><button id="clear">Clear</button><button class="primary" data-page="experiment">Run Experiment →</button></div>
- </div>
- <div class="workspace">
-  <aside class="sidebar card"><h3>Component Library</h3><p class="hint">Tap a component to place it.</p>
-   <button class="component" data-type="panel"><span class="pic panelPic"></span><b>Solar Panel</b><small>550 W PV module</small></button>
-   <button class="component" data-type="mppt"><span class="pic mpptPic">⚙</span><b>MPPT Controller</b><small>Charge controller</small></button>
-   <button class="component" data-type="battery"><span class="pic batteryPic">🔋</span><b>Battery Bank</b><small>48 V storage</small></button>
-   <button class="component" data-type="breaker"><span class="pic breakerPic">▣</span><b>DC Breaker</b><small>Protection</small></button>
-   <button class="component" data-type="inverter"><span class="pic inverterPic">↕</span><b>Inverter</b><small>DC → AC</small></button>
-   <button class="component" data-type="load"><span class="pic loadPic">💡</span><b>AC Load</b><small>Consumer</small></button>
-   <button class="component" data-type="meter"><span class="pic meterPic">▥</span><b>Energy Meter</b><small>Measurement</small></button>
-  </aside>
-  <div id="board" class="board">
-    <div class="boardGrid"></div><div class="axis">3D DESIGN SPACE • 48V DC / AC SYSTEM</div><svg id="wires"></svg><div id="nodes"></div>
-    <div class="empty" id="empty">Add components from the library<br><small>Drag nodes to arrange your system</small></div>
+
+  <div class="pageHead designHead">
+
+    <div>
+      <em>STEP 02</em>
+      <h2>3D Interactive Design Workspace</h2>
+      <p>
+        Place components, drag them around and create
+        electrical connections between terminals.
+      </p>
+    </div>
+
   </div>
-  <aside class="inspector card" id="inspector"><h3>Inspector</h3><p class="hint">Select a component to view terminals and properties.</p></aside>
- </div>
+
+
+  <!-- TOOLBAR -->
+
+  <div class="designToolbar">
+
+    <div class="toolGroup">
+
+      <button id="selectMode" class="tool active">
+        🖱 Select
+      </button>
+
+      <button id="connectMode" class="tool">
+        🔗 Connect
+      </button>
+
+      <button id="seriesMode" class="tool">
+        ➿ Series
+      </button>
+
+      <button id="parallelMode" class="tool">
+        ║ Parallel
+      </button>
+
+    </div>
+
+
+    <div class="toolGroup">
+
+      <button id="autoWire" class="tool">
+        ⚡ Auto Wire
+      </button>
+
+      <button id="removeSelected" class="tool danger">
+        🗑 Remove
+      </button>
+
+      <button id="undoBtn" class="tool">
+        ↩ Undo
+      </button>
+
+      <button id="clearBoard" class="tool danger">
+        Clear All
+      </button>
+
+    </div>
+
+  </div>
+
+
+  <div class="connectionHint" id="connectionHint">
+    Select a component from the library, or choose CONNECT and click two terminals.
+  </div>
+
+
+  <div class="workspace">
+
+
+    <!-- COMPONENT LIBRARY -->
+
+    <aside class="sidebar card">
+
+      <h3>Component Library</h3>
+
+      <p class="hint">
+        Tap a component to place it on the 3D board.
+      </p>
+
+
+      <button class="component" data-type="panel">
+
+        <span class="componentIcon solarIcon">☀</span>
+
+        <span>
+          <b>Solar Panel</b>
+          <small>PV Module • 550W</small>
+        </span>
+
+      </button>
+
+
+      <button class="component" data-type="mppt">
+
+        <span class="componentIcon">⚙</span>
+
+        <span>
+          <b>MPPT Controller</b>
+          <small>Charge Controller</small>
+        </span>
+
+      </button>
+
+
+      <button class="component" data-type="battery">
+
+        <span class="componentIcon">🔋</span>
+
+        <span>
+          <b>Battery Bank</b>
+          <small>48V Storage</small>
+        </span>
+
+      </button>
+
+
+      <button class="component" data-type="breaker">
+
+        <span class="componentIcon">▣</span>
+
+        <span>
+          <b>DC Breaker</b>
+          <small>Protection</small>
+        </span>
+
+      </button>
+
+
+      <button class="component" data-type="inverter">
+
+        <span class="componentIcon">↕</span>
+
+        <span>
+          <b>Inverter</b>
+          <small>DC → AC</small>
+        </span>
+
+      </button>
+
+
+      <button class="component" data-type="load">
+
+        <span class="componentIcon">💡</span>
+
+        <span>
+          <b>AC Load</b>
+          <small>Consumer</small>
+        </span>
+
+      </button>
+
+
+      <button class="component" data-type="meter">
+
+        <span class="componentIcon">▥</span>
+
+        <span>
+          <b>Energy Meter</b>
+          <small>Measurement</small>
+        </span>
+
+      </button>
+
+    </aside>
+
+
+    <!-- 3D BOARD -->
+
+    <div id="board" class="board">
+
+      <div class="boardGrid"></div>
+
+      <div class="boardTitle">
+        3D DESIGN SPACE
+        <span id="boardVoltage">48V DC / AC</span>
+      </div>
+
+      <svg id="wireLayer"></svg>
+
+      <div id="nodeLayer"></div>
+
+      <div id="boardEmpty" class="emptyBoard">
+
+        <div>＋</div>
+
+        <strong>Add components</strong>
+
+        <small>
+          Tap a component from the library
+        </small>
+
+      </div>
+
+    </div>
+
+
+    <!-- INSPECTOR -->
+
+    <aside class="inspector card">
+
+      <div id="inspectorContent">
+
+        <h3>Inspector</h3>
+
+        <p class="hint">
+          Select a component to view its properties
+          and terminals.
+        </p>
+
+      </div>
+
+    </aside>
+
+  </div>
+
+
+  <!-- CONNECTION TABLE -->
+
+  <div class="connectionPanel card">
+
+    <div class="panelHeader">
+
+      <div>
+        <h3>Connection Manager</h3>
+        <p class="hint">
+          Every wire is tracked independently.
+        </p>
+      </div>
+
+      <div class="connectionModeDisplay">
+        Mode:
+        <strong id="currentMode">
+          SELECT
+        </strong>
+      </div>
+
+    </div>
+
+    <div id="connectionList" class="connectionList">
+      <div class="emptyList">
+        No connections yet.
+      </div>
+    </div>
+
+  </div>
+
 </section>
+
+
+<!-- =========================================================
+     EXPERIMENT
+========================================================= -->
 
 <section id="experiment" class="page">
- <div class="pageHead compact"><div><em>STEP 03</em><h2>Experiment Console</h2><p>Change conditions and observe the system response.</p></div><button id="simulate" class="primary">▶ Start Simulation</button></div>
- <div class="metrics"><div>PV OUTPUT<b id="mPV">2.20 kW</b><small>estimated at current sunlight</small></div><div>LOAD<b id="mLoad">0.85 kW</b><small>AC demand</small></div><div>BATTERY<b id="mSOC">76%</b><small>state of charge</small></div><div>INVERTER<b id="mInv">17%</b><small>capacity used</small></div></div>
- <div class="experimentGrid">
-  <div class="sim card"><div class="simTop"><span id="simState">READY</span><span id="simTime">00:00:00</span></div>
-   <div class="flow">
-    <div class="flowNode"><span>☀</span><b>PV ARRAY</b><small id="pvNode">2.20 kW</small></div><i>→</i>
-    <div class="flowNode"><span>⚙</span><b>MPPT</b><small>98% eff.</small></div><i>→</i>
-    <div class="flowNode"><span>🔋</span><b>BATTERY</b><small id="batNode">76% SOC</small></div><i>→</i>
-    <div class="flowNode"><span>↕</span><b>INVERTER</b><small id="invNode">17% load</small></div><i>→</i>
-    <div class="flowNode"><span>💡</span><b>LOAD</b><small id="loadNode">850 W</small></div>
-   </div><div class="powerBeam" id="powerBeam"></div><div class="simNote" id="simNote">System ready. Start simulation to see live power flow.</div>
+
+  <div class="pageHead compact">
+
+    <div>
+      <em>STEP 03</em>
+      <h2>Experiment Console</h2>
+      <p>
+        Change operating conditions and observe system behaviour.
+      </p>
+    </div>
+
+    <button id="simulate" class="primary">
+      ▶ Start Simulation
+    </button>
+
   </div>
-  <div class="card controls"><h3>Environment</h3>
-   <label>Sunlight <output id="sunOut">100%</output><input id="sun" type="range" min="0" max="120" value="100"></label>
-   <label>AC Load (W)<input id="loadW" type="number" value="850"></label>
-   <label>Battery SOC (%)<input id="socW" type="number" min="0" max="100" value="76"></label>
-   <hr><h3>Fault Lab</h3><button id="overload" class="fault">⚡ Overload Test</button><button id="reverse" class="fault">＋/− Wrong Polarity</button><button id="short" class="fault">🔥 Short Circuit Test</button><div id="faultBox" class="status ok">● No active faults</div>
+
+
+  <div class="metrics">
+
+    <div class="metric">
+      <span>PV OUTPUT</span>
+      <b id="metricPV">0.00 kW</b>
+      <small>Estimated generation</small>
+    </div>
+
+    <div class="metric">
+      <span>LOAD</span>
+      <b id="metricLoad">0.85 kW</b>
+      <small>AC demand</small>
+    </div>
+
+    <div class="metric">
+      <span>BATTERY</span>
+      <b id="metricSOC">76%</b>
+      <small>State of charge</small>
+    </div>
+
+    <div class="metric">
+      <span>INVERTER</span>
+      <b id="metricInverter">17%</b>
+      <small>Capacity used</small>
+    </div>
+
   </div>
- </div>
+
+
+  <div class="experimentGrid">
+
+    <div class="sim card">
+
+      <div class="simTop">
+
+        <strong id="simulationState">
+          READY
+        </strong>
+
+        <span id="simulationTime">
+          00:00:00
+        </span>
+
+      </div>
+
+
+      <div class="flow">
+
+        <div class="flowNode">
+          <span>☀</span>
+          <b>PV ARRAY</b>
+          <small id="flowPV">0 W</small>
+        </div>
+
+        <i>→</i>
+
+        <div class="flowNode">
+          <span>⚙</span>
+          <b>MPPT</b>
+          <small>98% efficiency</small>
+        </div>
+
+        <i>→</i>
+
+        <div class="flowNode">
+          <span>🔋</span>
+          <b>BATTERY</b>
+          <small id="flowBattery">76% SOC</small>
+        </div>
+
+        <i>→</i>
+
+        <div class="flowNode">
+          <span>↕</span>
+          <b>INVERTER</b>
+          <small id="flowInverter">17%</small>
+        </div>
+
+        <i>→</i>
+
+        <div class="flowNode">
+          <span>💡</span>
+          <b>LOAD</b>
+          <small id="flowLoad">850 W</small>
+        </div>
+
+      </div>
+
+
+      <div id="powerBeam" class="powerBeam"></div>
+
+
+      <div id="simulationMessage" class="simNote">
+        System ready.
+        Start simulation to see power flow.
+      </div>
+
+    </div>
+
+
+    <!-- CONTROLS -->
+
+    <div class="card controls">
+
+      <h3>Environment</h3>
+
+
+      <label>
+
+        Sunlight
+
+        <output id="sunlightOutput">
+          100%
+        </output>
+
+        <input
+          id="sunlight"
+          type="range"
+          min="0"
+          max="120"
+          value="100"
+        >
+
+      </label>
+
+
+      <label>
+
+        AC Load (W)
+
+        <input
+          id="acLoad"
+          type="number"
+          value="850"
+          min="0"
+        >
+
+      </label>
+
+
+      <label>
+
+        Battery SOC (%)
+
+        <input
+          id="batterySOC"
+          type="number"
+          value="76"
+          min="0"
+          max="100"
+        >
+
+      </label>
+
+
+      <hr>
+
+
+      <h3>Fault Lab</h3>
+
+
+      <div class="faultButtons">
+
+        <button id="faultOverload">
+          ⚡ Overload
+        </button>
+
+        <button id="faultPolarity">
+          ＋/− Wrong Polarity
+        </button>
+
+        <button id="faultShort">
+          🔥 Short Circuit
+        </button>
+
+        <button id="faultVoltage">
+          ⚠ Voltage Mismatch
+        </button>
+
+        <button id="clearFaults">
+          ✓ Clear Faults
+        </button>
+
+      </div>
+
+
+      <div id="faultBox" class="status ok">
+        ● No active faults
+      </div>
+
+    </div>
+
+  </div>
+
 </section>
+
+
+<!-- =========================================================
+     ANALYSIS
+========================================================= -->
 
 <section id="analysis" class="page">
- <div class="pageHead"><div><em>STEP 04</em><h2>Engineering Analysis</h2><p>Review the simulated operating point and design checks.</p></div></div>
- <div class="analysisGrid"><div class="card scoreCard"><div id="score">92</div><b>DESIGN SCORE</b><p>Educational simulation score</p></div>
- <div class="card"><h3>System Checks</h3><div id="checks"></div></div>
- <div class="card"><h3>24-Hour Energy Profile</h3><div id="chart"></div></div></div>
- <div class="card warning"><b>⚠ Simulation limitation</b><p>This model is for experimentation and learning. It does not replace component datasheets, protection coordination, wiring calculations, grounding, local electrical code requirements, or qualified engineering review.</p></div>
+
+  <div class="pageHead">
+
+    <div>
+      <em>STEP 04</em>
+      <h2>Engineering Analysis</h2>
+      <p>
+        Review the simulated system and connection checks.
+      </p>
+    </div>
+
+  </div>
+
+
+  <div class="analysisGrid">
+
+    <div class="card scoreCard">
+
+      <div id="designScore">
+        0
+      </div>
+
+      <b>DESIGN SCORE</b>
+
+      <p>
+        Educational simulation score
+      </p>
+
+    </div>
+
+
+    <div class="card">
+
+      <h3>System Checks</h3>
+
+      <div id="systemChecks">
+        <div class="check neutral">
+          Run analysis after building your system.
+        </div>
+      </div>
+
+    </div>
+
+
+    <div class="card">
+
+      <h3>Connection Statistics</h3>
+
+      <div id="connectionStats"></div>
+
+    </div>
+
+
+    <div class="card">
+
+      <h3>24-Hour Energy Profile</h3>
+
+      <div id="energyChart"></div>
+
+    </div>
+
+  </div>
+
+
+  <div class="card warning">
+
+    <b>⚠ Simulation limitation</b>
+
+    <p>
+      This model is intended for education and experimentation.
+      It does not replace real component datasheets, protection
+      coordination, wiring calculations, grounding requirements,
+      electrical codes, or qualified engineering review.
+    </p>
+
+  </div>
+
 </section>
 
-<section id="report" class="page">
- <div class="pageHead compact"><div><em>STEP 05</em><h2>Simulation Report</h2><p>Generate a printable summary of the current experiment.</p></div><button id="print" class="primary">🖨 Print / Save PDF</button></div>
- <div id="reportContent" class="card report"></div>
+
+<!-- =========================================================
+     REPORT
+========================================================= -->
+
+<section id="reportPage" class="page">
+
+  <div class="pageHead compact">
+
+    <div>
+      <em>STEP 05</em>
+
+      <h2>Simulation Report</h2>
+
+      <p>
+        Generate a printable summary of the experiment.
+      </p>
+
+    </div>
+
+    <button id="printReport" class="primary">
+      🖨 Print / Save PDF
+    </button>
+
+  </div>
+
+
+  <div id="reportContent" class="card report">
+
+    <h2>SolarLab Structure V3</h2>
+
+    <p>
+      Build a system and run the simulation to generate
+      the report.
+    </p>
+
+  </div>
+
 </section>
+
+
+<!-- =========================================================
+     SUPPORT
+========================================================= -->
 
 <section id="support" class="page">
- <div class="support card"><div class="heart">♥</div><em>PROJECT SUPPORT</em><h2>Support SolarLab Structure</h2><p>SolarLab Structure is an independent educational project by <b>Geo. Lab</b>.</p>
- <div class="supportCards"><div><small>EMAIL</small><b>jbandrie@gmail.com</b></div><div><small>TELEGRAM</small><b>t.me/geodev21</b></div></div><p class="green">Your support helps improve SolarLab.</p></div>
- <div class="card"><h3>🤖 AI Development Acknowledgement</h3><p>SolarLab Structure was created and developed by Geo. Lab. AI-assisted tools, including ChatGPT by OpenAI, were used during development to assist with design ideas, coding, troubleshooting, documentation, and feature improvement.</p></div>
+
+  <div class="support card">
+
+    <div class="heart">
+      ♥
+    </div>
+
+    <em>PROJECT SUPPORT</em>
+
+    <h2>
+      Support SolarLab Structure
+    </h2>
+
+    <p>
+      SolarLab Structure is an independent educational
+      project by <b>Geo. Lab</b>.
+    </p>
+
+
+    <div class="supportCards">
+
+      <div>
+        <small>EMAIL</small>
+        <b>jbandrie@gmail.com</b>
+      </div>
+
+      <div>
+        <small>TELEGRAM</small>
+        <b>t.me/geodev21</b>
+      </div>
+
+    </div>
+
+  </div>
+
+
+  <div class="card">
+
+    <h3>
+      🤖 AI Development Acknowledgement
+    </h3>
+
+    <p>
+      SolarLab Structure was created and developed by Geo. Lab.
+      AI-assisted tools, including ChatGPT by OpenAI, were used
+      during development to assist with design ideas, coding,
+      troubleshooting, documentation, and feature improvement.
+    </p>
+
+  </div>
+
 </section>
+
 </main>
+
+
 <div id="toast"></div>
-<!-- JavaScript -->
+
+
 <script src="./app.js"></script>
+
 </body>
 </html>
