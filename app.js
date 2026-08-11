@@ -1533,7 +1533,8 @@ function report() {
   const c = calc();
 
   const reportBox =
-    $("report");
+    const reportBox =
+    $("reportContent");
 
   if (!reportBox) return;
 
