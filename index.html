@@ -788,7 +788,23 @@ EXPERIMENT
                     type="number"
                     min="0"
                     max="100"
+                    step="0.1"
                     value="76"
+                >
+
+            </label>
+
+            <label>
+                Cell temperature
+
+                <output id="tempOut">25°C</output>
+
+                <input
+                    id="temp"
+                    type="range"
+                    min="0"
+                    max="70"
+                    value="25"
                 >
 
             </label>
@@ -893,6 +909,44 @@ ANALYSIS
 
     </div>
 
+
+    <div class="card" style="margin-top:14px">
+        <h3>Cable Sizing &amp; Voltage Drop</h3>
+        <p class="hint">
+            Size conductors by ampacity and voltage drop. Typical targets: ≤2–3% DC, ≤3–5% AC.
+            Formula (2-wire): V<sub>d</sub> = 2 × I × L × (ρ / A). Educational ampacity only — not a code substitute.
+        </p>
+        <div class="setupGrid" style="margin-top:12px">
+            <div>
+                <label>Circuit
+                    <select id="cableCircuit">
+                        <option value="pv">PV array → MPPT (DC)</option>
+                        <option value="battery">Battery → Inverter (DC)</option>
+                        <option value="ac">Inverter → Load (AC)</option>
+                        <option value="custom">Custom current</option>
+                    </select>
+                </label>
+                <div class="two">
+                    <label>One-way length (m)<input id="cableLen" type="number" min="1" value="15" step="0.5"></label>
+                    <label>Max voltage drop (%)<input id="cableMaxVD" type="number" min="0.5" max="10" value="3" step="0.5"></label>
+                </div>
+                <div class="two">
+                    <label>Conductor
+                        <select id="cableMat">
+                            <option value="cu" selected>Copper (Cu)</option>
+                            <option value="al">Aluminium (Al)</option>
+                        </select>
+                    </label>
+                    <label>Custom current (A)<input id="cableCustomI" type="number" min="0" value="40" step="0.1"></label>
+                </div>
+                <label>Selected cable size<select id="cableSize"></select></label>
+                <button class="primary" id="calcCable" style="margin-top:8px">Recalculate</button>
+            </div>
+            <div id="cableResults">
+                <p class="hint">Results appear here.</p>
+            </div>
+        </div>
+    </div>
 
     <div class="card warning">
 
