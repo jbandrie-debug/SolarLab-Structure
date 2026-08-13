@@ -3,16 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
+<meta name="theme-color" content="#061018">
 <title>SolarLab Structure V3</title>
-
 <link rel="stylesheet" href="./style.css">
 </head>
 
 <body>
 
 <header class="topbar">
-
     <div class="brand">
         <span class="brandIcon">☀</span>
         <div>
@@ -27,13 +25,12 @@
         <button data-page="design">3D DESIGN</button>
         <button data-page="experiment">EXPERIMENT</button>
         <button data-page="analysis">ANALYSIS</button>
-        <button data-page="report">REPORT</button>
+        <button data-page="reportPage">REPORT</button>
+        <button data-page="support">SUPPORT</button>
     </nav>
 
     <button id="saveProject" class="saveBtn">SAVE</button>
-
 </header>
-
 
 <main>
 
@@ -47,7 +44,9 @@ WELCOME
 
         <div class="heroText">
 
-            <span class="eyebrow">INTERACTIVE SOLAR SYSTEM SIMULATOR</span>
+            <span class="eyebrow">
+                INTERACTIVE SOLAR SYSTEM SIMULATOR
+            </span>
 
             <h1>
                 Design.
@@ -57,8 +56,8 @@ WELCOME
 
             <p>
                 Build a virtual solar power system, connect components,
-                test series and parallel configurations, and observe
-                electrical behaviour before working on a real installation.
+                test single, series and parallel configurations,
+                and observe simulated electrical behaviour.
             </p>
 
             <div class="heroButtons">
@@ -81,7 +80,6 @@ WELCOME
             </div>
 
         </div>
-
 
         <div class="heroScene">
 
@@ -126,15 +124,17 @@ PROJECT SETUP
 
         <div>
             <span class="step">STEP 01</span>
+
             <h2>Project Setup</h2>
+
             <p>
                 Configure the virtual solar system.
-                Component values will automatically follow your selected voltage.
+                Component values automatically follow the selected
+                DC system voltage.
             </p>
         </div>
 
     </div>
-
 
     <div class="setupGrid">
 
@@ -177,7 +177,6 @@ PROJECT SETUP
 
                 </label>
 
-
                 <label>
                     PV Panels
 
@@ -208,7 +207,6 @@ PROJECT SETUP
 
                 </label>
 
-
                 <label>
                     Battery Ah
 
@@ -225,7 +223,6 @@ PROJECT SETUP
 
 
             <label>
-
                 Inverter Rating
 
                 <select id="inverterMode">
@@ -258,8 +255,6 @@ PROJECT SETUP
 
     </div>
 
-
-    <!-- AUTOMATIC PREVIEW -->
 
     <div class="card autoPreview">
 
@@ -301,12 +296,12 @@ PROJECT SETUP
 
             <div>
                 <small>MPPT</small>
-                <strong id="previewMPPT">48V / AUTO</strong>
+                <strong id="previewMPPT">48V / 60A</strong>
             </div>
 
             <div>
                 <small>BREAKER</small>
-                <strong id="previewBreaker">AUTO</strong>
+                <strong id="previewBreaker">60A</strong>
             </div>
 
         </div>
@@ -325,7 +320,7 @@ PROJECT SETUP
 
 
 <!-- =========================================================
-3D DESIGN
+3D DESIGN WORKSPACE
 ========================================================= -->
 
 <section id="design" class="page">
@@ -339,7 +334,7 @@ PROJECT SETUP
             <h2>3D Interactive Connection Workspace</h2>
 
             <p>
-                Add components, move them, and create electrical connections.
+                Add, move, resize and electrically connect components.
             </p>
 
         </div>
@@ -348,7 +343,11 @@ PROJECT SETUP
         <div class="toolbar">
 
             <button id="connectionMode">
-                🔗 Connection Mode
+                🔗 Connection
+            </button>
+
+            <button id="singleMode">
+                Single
             </button>
 
             <button id="seriesMode">
@@ -367,6 +366,10 @@ PROJECT SETUP
                 Clear
             </button>
 
+            <button id="expandWorkspace">
+                ⛶ Expand
+            </button>
+
             <button
                 class="primary"
                 data-page="experiment"
@@ -379,7 +382,7 @@ PROJECT SETUP
     </div>
 
 
-    <div class="designLayout">
+    <div id="designLayout" class="designLayout">
 
 
         <!-- COMPONENT LIBRARY -->
@@ -389,14 +392,11 @@ PROJECT SETUP
             <h3>Component Library</h3>
 
             <p class="hint">
-                Tap a component to add it to the workspace.
+                Tap a component to add it.
             </p>
 
 
-            <button
-                class="component"
-                data-type="panel"
-            >
+            <button class="component" data-type="panel">
 
                 <span class="componentIcon solar">☀</span>
 
@@ -408,25 +408,19 @@ PROJECT SETUP
             </button>
 
 
-            <button
-                class="component"
-                data-type="mppt"
-            >
+            <button class="component" data-type="mppt">
 
                 <span class="componentIcon gear">⚙</span>
 
                 <span>
                     <b>MPPT Controller</b>
-                    <small id="libMPPT">48V AUTO</small>
+                    <small id="libMPPT">48V / 60A</small>
                 </span>
 
             </button>
 
 
-            <button
-                class="component"
-                data-type="battery"
-            >
+            <button class="component" data-type="battery">
 
                 <span class="componentIcon battery">🔋</span>
 
@@ -438,25 +432,19 @@ PROJECT SETUP
             </button>
 
 
-            <button
-                class="component"
-                data-type="breaker"
-            >
+            <button class="component" data-type="breaker">
 
                 <span class="componentIcon breaker">▣</span>
 
                 <span>
                     <b>DC Breaker</b>
-                    <small id="libBreaker">AUTO</small>
+                    <small id="libBreaker">60A DC</small>
                 </span>
 
             </button>
 
 
-            <button
-                class="component"
-                data-type="inverter"
-            >
+            <button class="component" data-type="inverter">
 
                 <span class="componentIcon inverter">↕</span>
 
@@ -468,10 +456,7 @@ PROJECT SETUP
             </button>
 
 
-            <button
-                class="component"
-                data-type="load"
-            >
+            <button class="component" data-type="load">
 
                 <span class="componentIcon load">💡</span>
 
@@ -483,10 +468,7 @@ PROJECT SETUP
             </button>
 
 
-            <button
-                class="component"
-                data-type="meter"
-            >
+            <button class="component" data-type="meter">
 
                 <span class="componentIcon meter">▥</span>
 
@@ -513,21 +495,11 @@ PROJECT SETUP
 
                 <b>Connection Controls</b>
 
-                <p>
-                    1. Enable Connection Mode.
-                </p>
-
-                <p>
-                    2. Tap the first component.
-                </p>
-
-                <p>
-                    3. Tap the second component.
-                </p>
-
-                <p>
-                    Use Series or Parallel mode when creating multiple branches.
-                </p>
+                <p>1. Enable Connection.</p>
+                <p>2. Select first component.</p>
+                <p>3. Select second component.</p>
+                <p>4. Choose Single, Series or Parallel.</p>
+                <p>Click a wire to remove it.</p>
 
             </div>
 
@@ -552,6 +524,21 @@ PROJECT SETUP
                 <strong id="boardVoltage">
                     48V DC / AC SYSTEM
                 </strong>
+
+            </div>
+
+
+            <div class="boardTools">
+
+                <button id="zoomOut">−</button>
+
+                <span id="zoomLabel">100%</span>
+
+                <button id="zoomIn">+</button>
+
+                <button id="fitBoard">
+                    Fit
+                </button>
 
             </div>
 
@@ -586,6 +573,14 @@ PROJECT SETUP
                 class="connectionHint"
             >
                 Connection mode OFF
+            </div>
+
+
+            <div
+                id="expandedBadge"
+                class="expandedBadge"
+            >
+                EXPANDED WORKSPACE
             </div>
 
         </div>
@@ -788,23 +783,7 @@ EXPERIMENT
                     type="number"
                     min="0"
                     max="100"
-                    step="0.1"
                     value="76"
-                >
-
-            </label>
-
-            <label>
-                Cell temperature
-
-                <output id="tempOut">25°C</output>
-
-                <input
-                    id="temp"
-                    type="range"
-                    min="0"
-                    max="70"
-                    value="25"
                 >
 
             </label>
@@ -875,7 +854,7 @@ ANALYSIS
         <div class="card scoreCard">
 
             <div id="score">
-                92
+                100
             </div>
 
             <b>DESIGN SCORE</b>
@@ -909,44 +888,6 @@ ANALYSIS
 
     </div>
 
-
-    <div class="card" style="margin-top:14px">
-        <h3>Cable Sizing &amp; Voltage Drop</h3>
-        <p class="hint">
-            Size conductors by ampacity and voltage drop. Typical targets: ≤2–3% DC, ≤3–5% AC.
-            Formula (2-wire): V<sub>d</sub> = 2 × I × L × (ρ / A). Educational ampacity only — not a code substitute.
-        </p>
-        <div class="setupGrid" style="margin-top:12px">
-            <div>
-                <label>Circuit
-                    <select id="cableCircuit">
-                        <option value="pv">PV array → MPPT (DC)</option>
-                        <option value="battery">Battery → Inverter (DC)</option>
-                        <option value="ac">Inverter → Load (AC)</option>
-                        <option value="custom">Custom current</option>
-                    </select>
-                </label>
-                <div class="two">
-                    <label>One-way length (m)<input id="cableLen" type="number" min="1" value="15" step="0.5"></label>
-                    <label>Max voltage drop (%)<input id="cableMaxVD" type="number" min="0.5" max="10" value="3" step="0.5"></label>
-                </div>
-                <div class="two">
-                    <label>Conductor
-                        <select id="cableMat">
-                            <option value="cu" selected>Copper (Cu)</option>
-                            <option value="al">Aluminium (Al)</option>
-                        </select>
-                    </label>
-                    <label>Custom current (A)<input id="cableCustomI" type="number" min="0" value="40" step="0.1"></label>
-                </div>
-                <label>Selected cable size<select id="cableSize"></select></label>
-                <button class="primary" id="calcCable" style="margin-top:8px">Recalculate</button>
-            </div>
-            <div id="cableResults">
-                <p class="hint">Results appear here.</p>
-            </div>
-        </div>
-    </div>
 
     <div class="card warning">
 
@@ -985,7 +926,6 @@ REPORT
 
         </div>
 
-
         <button
             id="printReport"
             class="primary"
@@ -1021,8 +961,8 @@ SUPPORT
         </h2>
 
         <p>
-            SolarLab Structure is an independent educational project by
-            <b>Geo. Lab</b>.
+            SolarLab Structure is an independent educational
+            project by <b>Geo. Lab</b>.
         </p>
 
         <div class="supportCards">
@@ -1052,7 +992,7 @@ SUPPORT
             SolarLab Structure was created and developed by Geo. Lab.
             AI-assisted tools, including ChatGPT by OpenAI, were used
             during development to assist with design ideas, coding,
-            troubleshooting, documentation, and feature improvement.
+            troubleshooting, documentation and feature improvement.
         </p>
 
     </div>
@@ -1063,7 +1003,6 @@ SUPPORT
 
 
 <div id="toast"></div>
-
 
 <script src="./app.js"></script>
 
