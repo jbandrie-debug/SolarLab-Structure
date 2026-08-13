@@ -22,8 +22,25 @@ const state = {
     connectionStart: null,
     simulationRunning: false,
     simulationSeconds: 0,
-    faults: []
+    faults: [],
+    sun: 100,
+    loadW: 850,
+    soc: 76,
+    temp: 25,
+    lastCable: null
 };
+
+const MODULE_TYPICAL = { vmp: 41.8, imp: 13.16, voc: 49.5, isc: 13.9 };
+
+const CABLE_SIZES = [
+    { mm2: 1.5, awg: "16", ampCu: 15 }, { mm2: 2.5, awg: "14", ampCu: 21 },
+    { mm2: 4, awg: "12", ampCu: 28 }, { mm2: 6, awg: "10", ampCu: 37 },
+    { mm2: 10, awg: "8", ampCu: 52 }, { mm2: 16, awg: "6", ampCu: 69 },
+    { mm2: 25, awg: "4", ampCu: 90 }, { mm2: 35, awg: "2", ampCu: 111 },
+    { mm2: 50, awg: "1/0", ampCu: 134 }, { mm2: 70, awg: "2/0", ampCu: 171 },
+    { mm2: 95, awg: "3/0", ampCu: 207 }, { mm2: 120, awg: "4/0", ampCu: 239 }
+];
+const RHO = { cu: 0.0175, al: 0.0282 };
 /* =========================================================
    COMPONENT DEFINITIONS
 ========================================================= */
@@ -177,9 +194,11 @@ function getDefaultValues(type) {
     switch (type) {
         case "panel":
             return {
-                voltage: c.voltage,
+                voltage: MODULE_TYPICAL.vmp,
                 watt: c.panelW,
-                current: Number((c.panelW / c.voltage).toFixed(2))
+                current: MODULE_TYPICAL.imp,
+                vmp: MODULE_TYPICAL.vmp,
+                imp: MODULE_TYPICAL.imp
             };
         case "mppt":
             return { voltage: c.voltage, maxCurrent: c.mpptCurrent, efficiency: 98 };
@@ -625,28 +644,56 @@ function loadDemo() {
    SIMULATION ENGINE
 ========================================================= */
 function calculateSimulation() {
-    const sun = Number($("sun")?.value || 100) / 100;
-    const load = Math.max(0, Number($("loadW")?.value) || 0);
-    const soc = Math.max(0, Math.min(100, Number($("socW")?.value) || 0));
+    const sun = (Number($("sun")?.value ?? state.sun) || 0) / 100;
+    const load = Math.max(0, Number($("loadW")?.value ?? state.loadW) || 0);
+    const soc = Math.max(0, Math.min(100, Number($("socW")?.value ?? state.soc) || 0));
+    const temp = Number($("temp")?.value ?? state.temp) || 25;
+    state.sun = sun * 100; state.loadW = load; state.soc = soc; state.temp = temp;
     const config = getConfig();
-    const pv = config.pvTotal * sun;
+    const tempFactor = 1 - Math.max(0, (temp - 25) * 0.004);
+    const mpptEff = 0.98, invEff = 0.94;
+    const rawPV = config.pvTotal * sun * tempFactor;
+    const pv = rawPV * mpptEff;
+    const dcForLoad = load / invEff;
     const inverterUsage = config.inverterW ? (load / config.inverterW) * 100 : 0;
-    return { pv, load, soc, inverterUsage, surplus: pv - load };
+    let netW = pv - dcForLoad;
+    if (state.faults.includes("short") || state.faults.includes("reverse")) netW = 0;
+    if (state.faults.includes("overload")) netW = -dcForLoad;
+    const capacityWh = config.batteryWh;
+    const usableWh = capacityWh * 0.8;
+    const peakSunHours = 4.5 * sun;
+    const dailyPV = (config.pvTotal / 1000) * peakSunHours * mpptEff * tempFactor;
+    const dailyLoad = (load / 1000) * 24;
+    const autonomyH = load > 0 ? (usableWh * (soc / 100)) / load : 99;
+    return { pv, load, soc, inverterUsage, netW, temp, capacityWh, usableWh, dailyPV, dailyLoad, autonomyH, surplus: pv - load };
 }
 function updateSimulationUI() {
     const data = calculateSimulation();
-    if ($("sunOut")) $("sunOut").textContent = `${$("sun")?.value}%`;
+    if ($("sunOut")) $("sunOut").textContent = `${Math.round(state.sun)}%`;
+    if ($("tempOut")) $("tempOut").textContent = `${state.temp}°C`;
     if ($("mPV")) $("mPV").textContent = `${(data.pv / 1000).toFixed(2)} kW`;
     if ($("mLoad")) $("mLoad").textContent = `${data.load.toLocaleString()} W`;
-    if ($("mSOC")) $("mSOC").textContent = `${data.soc}%`;
+    if ($("mSOC")) $("mSOC").textContent = `${data.soc.toFixed(1)}%`;
     if ($("mInv")) $("mInv").textContent = `${Math.round(data.inverterUsage)}%`;
     if ($("pvNode")) $("pvNode").textContent = `${(data.pv / 1000).toFixed(2)} kW`;
-    if ($("batNode")) $("batNode").textContent = `${data.soc}% SOC`;
+    if ($("batNode")) $("batNode").textContent = `${data.soc.toFixed(1)}% SOC`;
     if ($("invNode")) $("invNode").textContent = `${Math.round(data.inverterUsage)}% load`;
     if ($("loadNode")) $("loadNode").textContent = `${data.load.toLocaleString()} W`;
-    if (data.inverterUsage > 100 && $("faultBox")) {
-        $("faultBox").className = "status error";
-        $("faultBox").textContent = "● INVERTER OVERLOAD";
+    const box = $("faultBox");
+    if (box) {
+        if (state.faults.includes("overload")) { box.className = "status error"; box.textContent = "● INVERTER OVERLOAD — protection trip"; }
+        else if (state.faults.includes("reverse")) { box.className = "status error"; box.textContent = "● WRONG POLARITY — connection blocked"; }
+        else if (state.faults.includes("short")) { box.className = "status error"; box.textContent = "● SHORT CIRCUIT — protective shutdown"; }
+        else if (data.inverterUsage > 100) { box.className = "status error"; box.textContent = "● Load exceeds inverter rating"; }
+        else if (data.soc < 20) { box.className = "status error"; box.textContent = "● Low SOC — deep discharge risk"; }
+        else { box.className = "status ok"; box.textContent = "● No active faults"; }
+    }
+    if ($("simNote")) {
+        if (!state.simulationRunning) $("simNote").textContent = "System ready. Start simulation to see live power flow and SOC change.";
+        else if (state.faults.length) $("simNote").textContent = "Fault active — power flow interrupted.";
+        else if (data.netW > 50) $("simNote").textContent = `Charging: +${data.netW.toFixed(0)} W into battery. SOC rising.`;
+        else if (data.netW < -50) $("simNote").textContent = `Discharging: ${Math.abs(data.netW).toFixed(0)} W from battery. SOC falling.`;
+        else $("simNote").textContent = "Near balance — PV roughly matches load.";
     }
 }
 function toggleSimulation() {
@@ -656,53 +703,194 @@ function toggleSimulation() {
         if (button) button.textContent = "■ Stop Simulation";
         if ($("simState")) $("simState").textContent = "RUNNING";
         if ($("powerBeam")) $("powerBeam").classList.add("running");
-        if ($("simNote")) $("simNote").textContent = "Simulation running. Power flow active.";
+        toast("Simulation started — SOC evolves with net power");
     } else {
         if (button) button.textContent = "▶ Start Simulation";
         if ($("simState")) $("simState").textContent = "READY";
         if ($("powerBeam")) $("powerBeam").classList.remove("running");
-        if ($("simNote")) $("simNote").textContent = "Simulation stopped.";
+        state.faults = [];
+        toast("Simulation stopped");
     }
+    updateSimulationUI();
     renderWires();
 }
+
+function triggerFault(type) {
+    if (!state.faults.includes(type)) state.faults.push(type);
+    if (type === "overload") {
+        state.loadW = Math.max(getConfig().inverterW * 1.3, 6500);
+        if ($("loadW")) $("loadW").value = state.loadW;
+    }
+    updateSimulationUI();
+    renderWires();
+    toast(type.toUpperCase() + " fault triggered");
+}
+
+/* Live SOC + clock: 1 sim-second ≈ 1 real minute of energy */
+setInterval(() => {
+    if (!state.simulationRunning) return;
+    state.simulationSeconds += 1;
+    const h = String(Math.floor(state.simulationSeconds / 3600)).padStart(2, "0");
+    const m = String(Math.floor(state.simulationSeconds / 60) % 60).padStart(2, "0");
+    const s = String(state.simulationSeconds % 60).padStart(2, "0");
+    if ($("simTime")) $("simTime").textContent = h + ":" + m + ":" + s;
+    if (state.faults.includes("short") || state.faults.includes("reverse")) { updateSimulationUI(); return; }
+    const data = calculateSimulation();
+    if (state.faults.includes("overload") && data.inverterUsage > 110) { updateSimulationUI(); return; }
+    const capacityWh = getConfig().batteryWh || 1;
+    const dSOC = (data.netW * 60) / capacityWh * 100;
+    state.soc = Math.max(0, Math.min(100, state.soc + dSOC));
+    if ($("socW")) $("socW").value = state.soc.toFixed(1);
+    updateSimulationUI();
+}, 1000);
 /* =========================================================
    ANALYSIS & REPORT
 ========================================================= */
+function estimateArrayTopology() {
+    const series = Math.max(1, Math.round(state.voltage / MODULE_TYPICAL.vmp));
+    const parallel = Math.max(1, Math.ceil(state.panelCount / series));
+    return { series, parallel, arrayCurrent: parallel * MODULE_TYPICAL.imp };
+}
+function circuitCurrent(circuit) {
+    const config = getConfig();
+    const topo = estimateArrayTopology();
+    if (circuit === "custom") return Math.max(0, Number($("cableCustomI")?.value) || 0);
+    if (circuit === "pv") return topo.arrayCurrent * (state.sun / 100) * 1.25;
+    if (circuit === "battery") return (state.loadW / (config.voltage * 0.94)) * 1.25;
+    if (circuit === "ac") return state.loadW / 230;
+    return 0;
+}
+function voltageDrop(I, L, mm2, mat, V) {
+    const rho = RHO[mat] || RHO.cu;
+    const R_per_m = rho / mm2;
+    const Vd = 2 * I * L * R_per_m;
+    return { Vd, VdPct: V > 0 ? (Vd / V) * 100 : 0, powerLoss: Vd * I, R_per_m };
+}
+function recommendCable(I, L, maxVD, mat, V) {
+    const rho = RHO[mat] || RHO.cu;
+    const VdAllow = (maxVD / 100) * V;
+    const aminVD = VdAllow > 0 ? (2 * I * L * rho) / VdAllow : 0;
+    for (const s of CABLE_SIZES) {
+        const amp = mat === "al" ? s.ampCu * 0.78 : s.ampCu;
+        if (amp >= I && s.mm2 >= aminVD) return { recommended: { ...s, amp }, aminVD };
+    }
+    const s = CABLE_SIZES[CABLE_SIZES.length - 1];
+    return { recommended: { ...s, amp: mat === "al" ? s.ampCu * 0.78 : s.ampCu }, aminVD };
+}
+function populateCableSizes() {
+    const sel = $("cableSize");
+    if (!sel) return;
+    const cur = sel.value;
+    sel.innerHTML = CABLE_SIZES.map(s => `<option value="${s.mm2}">${s.mm2} mm² (≈ AWG ${s.awg})</option>`).join("");
+    sel.value = cur || "10";
+}
+function runCableCalc() {
+    if (!$("cableCircuit")) return;
+    const circuit = $("cableCircuit").value;
+    const len = Math.max(0.1, Number($("cableLen")?.value) || 15);
+    const maxVD = Math.max(0.1, Number($("cableMaxVD")?.value) || 3);
+    const mat = $("cableMat")?.value || "cu";
+    const sizeMm2 = Number($("cableSize")?.value) || 10;
+    const I = circuitCurrent(circuit);
+    const V = circuit === "ac" ? 230 : state.voltage;
+    const { recommended, aminVD } = recommendCable(I, len, maxVD, mat, V);
+    const sel = voltageDrop(I, len, sizeMm2, mat, V);
+    const rec = voltageDrop(I, len, recommended.mm2, mat, V);
+    const sizeInfo = CABLE_SIZES.find(s => s.mm2 === sizeMm2) || CABLE_SIZES[0];
+    const selAmp = mat === "al" ? sizeInfo.ampCu * 0.78 : sizeInfo.ampCu;
+    const ampOk = selAmp >= I, vdOk = sel.VdPct <= maxVD + 0.05;
+    let statusClass = "ok", statusText = "● Cable meets ampacity and voltage-drop targets";
+    if (!ampOk && !vdOk) { statusClass = "error"; statusText = "⚡ Undersized — ampacity and Vd failed"; }
+    else if (!ampOk) { statusClass = "error"; statusText = "⚡ Ampacity exceeded"; }
+    else if (!vdOk) { statusClass = "error"; statusText = "⚠ Voltage drop above target"; }
+    const labels = { pv: "PV → MPPT (DC)", battery: "Battery → Inverter (DC)", ac: "Inverter → Load (AC)", custom: "Custom" };
+    if ($("cableResults")) {
+        $("cableResults").innerHTML = `
+            <div class="check">Circuit <b>${labels[circuit]||circuit}</b></div>
+            <div class="check">Design current <b>${I.toFixed(1)} A</b></div>
+            <div class="check">Voltage <b>${V} V</b></div>
+            <div class="check">Length / material <b>${len} m / ${mat==="cu"?"Copper":"Aluminium"}</b></div>
+            <div class="check">Selected <b>${sizeMm2} mm² (≈ AWG ${sizeInfo.awg})</b></div>
+            <div class="check ${ampOk?"good":"bad"}">Ampacity <b>${selAmp.toFixed(0)} A ${ampOk?"✓":"✗"}</b></div>
+            <div class="check ${vdOk?"good":"bad"}">Voltage drop <b>${sel.Vd.toFixed(2)} V (${sel.VdPct.toFixed(2)}%) ${vdOk?"✓":"✗"}</b></div>
+            <div class="check">Power loss <b>${sel.powerLoss.toFixed(1)} W</b></div>
+            <div class="check">Min area for Vd <b>${aminVD.toFixed(1)} mm²</b></div>
+            <div class="check good">Recommended <b>${recommended.mm2} mm² (≈ AWG ${recommended.awg})</b></div>
+            <div class="check">At recommended Vd <b>${rec.Vd.toFixed(2)} V (${rec.VdPct.toFixed(2)}%)</b></div>
+            <div class="status ${statusClass}" style="margin-top:12px">${statusText}</div>
+            <p class="hint" style="margin-top:8px">V<sub>d</sub>=2×I×L×(ρ/A). Higher system voltage → lower current → smaller cable. Educational ampacity only.</p>`;
+    }
+    state.lastCable = { circuit: labels[circuit], I: I.toFixed(1), V, len, mat: mat==="cu"?"Copper":"Aluminium",
+        selected: sizeMm2+" mm²", Vd: sel.Vd.toFixed(2), VdPct: sel.VdPct.toFixed(2),
+        recommended: recommended.mm2+" mm²", ok: ampOk && vdOk };
+}
+
 function updateAnalysis() {
     const checks = $("checks");
     if (!checks) return;
+    const data = calculateSimulation();
     let score = 100;
     const results = [];
-    if (state.components.length === 0) {
-        score -= 20;
-        results.push({ good: false, text: "No components placed." });
-    } else {
-        results.push({ good: true, text: `${state.components.length} component(s) placed.` });
-    }
+    if (state.components.length === 0) { score -= 20; results.push({ good: false, text: "No components placed." }); }
+    else results.push({ good: true, text: state.components.length + " component(s) placed." });
     const invalid = state.connections.filter(c => !c.valid);
-    if (invalid.length) {
-        score -= Math.min(40, invalid.length * 10);
-        results.push({ good: false, text: `${invalid.length} invalid connection(s) detected.` });
-    } else {
-        results.push({ good: true, text: `${state.connections.length} valid connection(s).` });
+    if (invalid.length) { score -= Math.min(40, invalid.length * 10); results.push({ good: false, text: invalid.length + " invalid connection(s)." }); }
+    else if (state.connections.length) results.push({ good: true, text: state.connections.length + " valid connection(s)." });
+    if (data.inverterUsage > 100) { score -= 25; results.push({ good: false, text: "Inverter overloaded (" + Math.round(data.inverterUsage) + "%)." }); }
+    else if (data.inverterUsage > 80) { score -= 8; results.push({ good: false, text: "Inverter near limit (" + Math.round(data.inverterUsage) + "%)." }); }
+    else results.push({ good: true, text: "Inverter utilisation " + Math.round(data.inverterUsage) + "%." });
+    if (data.dailyPV < data.dailyLoad) { score -= 15; results.push({ good: false, text: "Daily PV (" + data.dailyPV.toFixed(1) + " kWh) < load (" + data.dailyLoad.toFixed(1) + " kWh)." }); }
+    else results.push({ good: true, text: "Energy balance OK: PV " + data.dailyPV.toFixed(1) + " vs load " + data.dailyLoad.toFixed(1) + " kWh/day." });
+    if (data.autonomyH < 12) { score -= 12; results.push({ good: false, text: "Low autonomy ≈ " + data.autonomyH.toFixed(1) + " h." }); }
+    else results.push({ good: true, text: "Autonomy ≈ " + data.autonomyH.toFixed(1) + " h (80% DoD)." });
+    if (state.faults.length) { score -= 20; results.push({ good: false, text: "Active fault(s): " + state.faults.join(", ") }); }
+    score = Math.max(0, Math.round(score));
+    if ($("score")) $("score").textContent = score;
+    checks.innerHTML = results.map(r => `<div class="check ${r.good?"good":"bad"}">${r.good?"✓":"⚠"} ${r.text}</div>`).join("");
+    const chart = $("chart");
+    if (chart) {
+        chart.innerHTML = "";
+        for (let i = 0; i < 24; i++) {
+            let irr = (i >= 6 && i <= 18) ? Math.sin(((i - 6) / 12) * Math.PI) : 0;
+            const bar = document.createElement("div");
+            bar.className = "energyBar";
+            bar.style.height = Math.max(4, irr * 100) + "%";
+            chart.appendChild(bar);
+        }
     }
-    if ($("score")) $("score").textContent = Math.max(0, score);
-    checks.innerHTML = results.map(r => `<div class="check ${r.good ? "good" : "bad"}">${r.good ? "✓" : "⚠"} ${r.text}</div>`).join("");
+    populateCableSizes();
+    runCableCalc();
 }
 function generateReport() {
     const config = getConfig();
     const sim = calculateSimulation();
+    const cab = state.lastCable;
+    const cableRows = cab ? `
+        <tr><td colspan="2"><b>Cable check</b></td></tr>
+        <tr><td>Circuit</td><td>${escapeHTML(String(cab.circuit))}</td></tr>
+        <tr><td>Design current</td><td>${cab.I} A</td></tr>
+        <tr><td>Length / material</td><td>${cab.len} m / ${cab.mat}</td></tr>
+        <tr><td>Selected / recommended</td><td>${cab.selected} / ${cab.recommended}</td></tr>
+        <tr><td>Voltage drop</td><td>${cab.Vd} V (${cab.VdPct}%)</td></tr>
+        <tr><td>Status</td><td>${cab.ok ? "Within targets" : "Review required"}</td></tr>` : "";
     if ($("reportContent")) {
         $("reportContent").innerHTML = `
             <h2>${escapeHTML(state.projectName)}</h2>
             <p>${escapeHTML(state.description)}</p>
             <table class="reportTable">
                 <tr><td>System Voltage</td><td>${config.voltage} V</td></tr>
-                <tr><td>PV Array</td><td>${config.panelCount} × ${config.panelW} W = ${(config.pvTotal / 1000).toFixed(2)} kW</td></tr>
-                <tr><td>Battery</td><td>${config.voltage} V / ${config.batteryAh} Ah</td></tr>
+                <tr><td>PV Array</td><td>${config.panelCount} × ${config.panelW} W = ${(config.pvTotal / 1000).toFixed(2)} kWp</td></tr>
+                <tr><td>Battery</td><td>${config.voltage} V / ${config.batteryAh} Ah (${(config.batteryWh/1000).toFixed(1)} kWh)</td></tr>
                 <tr><td>Inverter Rating</td><td>${config.inverterW.toLocaleString()} W</td></tr>
-                <tr><td>Current PV Output</td><td>${(sim.pv / 1000).toFixed(2)} kW</td></tr>
+                <tr><td>Irradiance / Temp</td><td>${Math.round(state.sun)}% / ${state.temp}°C</td></tr>
+                <tr><td>PV Output (now)</td><td>${(sim.pv / 1000).toFixed(2)} kW</td></tr>
+                <tr><td>AC Load / SOC</td><td>${sim.load} W / ${sim.soc.toFixed(1)}%</td></tr>
+                <tr><td>Autonomy</td><td>${sim.autonomyH.toFixed(1)} h</td></tr>
+                <tr><td>Daily PV / Load</td><td>${sim.dailyPV.toFixed(1)} / ${sim.dailyLoad.toFixed(1)} kWh</td></tr>
+                <tr><td>Components / wires</td><td>${state.components.length} / ${state.connections.length}</td></tr>
+                ${cableRows}
             </table>
+            <p style="margin-top:14px;color:#8ea3ad;font-size:12px">Educational simulation only. Verify real designs with datasheets, code-compliant cable sizing, protection coordination, and qualified professionals.</p>
         `;
     }
 }
@@ -766,16 +954,32 @@ function escapeHTML(value) {
 function initialize() {
     qsa("[data-page]").forEach(btn => btn.addEventListener("click", () => showPage(btn.dataset.page === "report" ? "reportPage" : btn.dataset.page)));
     qsa(".component").forEach(btn => btn.addEventListener("click", () => addComponent(btn.dataset.type)));
-    if ($("connectionMode")) $("connectionMode").addEventListener("click", toggleConnectionMode);
-    if ($("seriesMode")) $("seriesMode").addEventListener("click", () => setConnectionType("series"));
-    if ($("parallelMode")) $("parallelMode").addEventListener("click", () => setConnectionType("parallel"));
-    if ($("autoWire")) $("autoWire").addEventListener("click", autoWire);
-    if ($("clearWorkspace")) $("clearWorkspace").addEventListener("click", clearWorkspace);
-    if ($("removeSelected")) $("removeSelected").addEventListener("click", removeSelected);
-    if ($("loadDemo")) $("loadDemo").addEventListener("click", loadDemo);
-    if ($("simulate")) $("simulate").addEventListener("click", toggleSimulation);
-    if ($("saveProject")) $("saveProject").addEventListener("click", saveProject);
-    if ($("openWorkspace")) $("openWorkspace").addEventListener("click", () => { readSetup(); applyConfigurationToComponents(); showPage("design"); });
+    $("connectionMode")?.addEventListener("click", toggleConnectionMode);
+    $("seriesMode")?.addEventListener("click", () => setConnectionType("series"));
+    $("parallelMode")?.addEventListener("click", () => setConnectionType("parallel"));
+    $("autoWire")?.addEventListener("click", autoWire);
+    $("clearWorkspace")?.addEventListener("click", clearWorkspace);
+    $("removeSelected")?.addEventListener("click", removeSelected);
+    $("loadDemo")?.addEventListener("click", loadDemo);
+    $("simulate")?.addEventListener("click", toggleSimulation);
+    $("saveProject")?.addEventListener("click", saveProject);
+    $("openWorkspace")?.addEventListener("click", () => { readSetup(); applyConfigurationToComponents(); showPage("design"); });
+    $("printReport")?.addEventListener("click", () => { generateReport(); window.print(); });
+    ["pname","pdesc","voltage","panelCount","panelW","batteryAh","inverterMode"].forEach(id => {
+        $(id)?.addEventListener("input", updateSetupPreview);
+        $(id)?.addEventListener("change", updateSetupPreview);
+    });
+    ["sun","loadW","socW","temp"].forEach(id => {
+        $(id)?.addEventListener("input", () => { state.faults = state.faults.filter(f => f !== "overload"); updateSimulationUI(); });
+    });
+    $("overload")?.addEventListener("click", () => triggerFault("overload"));
+    $("reverse")?.addEventListener("click", () => triggerFault("reverse"));
+    $("short")?.addEventListener("click", () => triggerFault("short"));
+    ["cableCircuit","cableLen","cableMaxVD","cableMat","cableSize","cableCustomI"].forEach(id => {
+        $(id)?.addEventListener("input", runCableCalc);
+        $(id)?.addEventListener("change", runCableCalc);
+    });
+    $("calcCable")?.addEventListener("click", runCableCalc);
     updateSetupPreview();
     updateSimulationUI();
     updateAnalysis();
