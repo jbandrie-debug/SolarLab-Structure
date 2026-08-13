@@ -1120,3 +1120,22 @@ RESPONSIVE
     }
 
 }
+
+
+/* Cable calculator */
+#cableResults {
+    background: #0a161f;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    padding: 12px 14px;
+    min-height: 260px;
+}
+#cableResults .check {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+}
+#cableResults .check b {
+    color: var(--text);
+    text-align: right;
+}
